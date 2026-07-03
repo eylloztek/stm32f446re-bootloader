@@ -64,6 +64,8 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 #define DEBUG_PRINT
+#define BUFFER_SIZE		16
+#define UART_PORT 		&huart2
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

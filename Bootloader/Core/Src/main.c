@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "string.h"
 #include "stdio.h"
+#include "bootloader.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,6 +50,9 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 
 char message[] = "Going to Application...\r\n";
+uint8_t rxChar;
+char messageBuffer[BUFFER_SIZE];
+uint8_t bufferIndex;
 
 /* USER CODE END PV */
 
@@ -82,7 +86,7 @@ void JumpToApplication(void) {
 }
 
 void uartSend(char *message) {
-	HAL_UART_Transmit(&huart2, (uint8_t*) message, strlen(message),
+	HAL_UART_Transmit(UART_PORT, (uint8_t*) message, strlen(message),
 			HAL_MAX_DELAY);
 }
 
@@ -118,7 +122,7 @@ int main(void) {
 	MX_GPIO_Init();
 	MX_USART2_UART_Init();
 	/* USER CODE BEGIN 2 */
-
+	HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -250,7 +254,18 @@ static void MX_GPIO_Init(void) {
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+	if (huart->Instance == USART2) {
+		if (bufferIndex < BUFFER_SIZE -1) {
+			messageBuffer[bufferIndex++] = rxChar;
+			messageBuffer[bufferIndex] = '\0';
+		}
+		if (messageBuffer[bufferIndex - 2] == '\r' && messageBuffer[bufferIndex-1] == '\n') {
+			processBootloaderCommand();
+		}
+	}
+	HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
+}
 /* USER CODE END 4 */
 
 /**
