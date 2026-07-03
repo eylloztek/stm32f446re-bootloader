@@ -32,6 +32,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define APP_START_ADDRESS 				0x08008000UL
+#define APP_STACK_POINTER				*(__IO uint32_t*) APP_START_ADDRESS
+#define APP_RESET_HANDLER				*(__IO uint32_t*) (APP_START_ADDRESS+4)
 
 /* USER CODE END PD */
 
@@ -71,7 +74,11 @@ int _write(int file, char *ptr, int len) {
 }
 
 void JumpToApplication(void) {
+	__set_MSP(APP_STACK_POINTER);
+	void (*AppResetHandler) (void);
 
+	AppResetHandler = (void (*) (void)) APP_RESET_HANDLER;
+	AppResetHandler();
 }
 
 void uartSend(char *message) {
