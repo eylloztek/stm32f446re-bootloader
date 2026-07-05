@@ -1,52 +1,168 @@
-#settings
-.settings/
+# =========================================================
+# IDE / Workspace settings
+# =========================================================
 
-#metadata
+# Eclipse / STM32CubeIDE
+.settings/
 .metadata/
 
-#Debug
+# Visual Studio
+.vs/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+
+# =========================================================
+# Build folders
+# =========================================================
+
+# STM32 / C build folders
 Debug/
 debug/
 Release/
-release
+release/
 
-# Prerequisites
+# .NET / C# build folders
+[Bb]in/
+[Oo]bj/
+
+# Publish output
+[Pp]ublish/
+app.publish/
+
+
+# =========================================================
+# C / STM32 prerequisites
+# =========================================================
+
 *.d
 
+
+# =========================================================
 # Object files
+# =========================================================
+
 *.o
 *.ko
 *.obj
-*.elf
 
-# Linker output
-*.ilk
+
+# =========================================================
+# STM32 / Embedded output files
+# =========================================================
+
+*.elf
+*.hex
+*.bin
 *.map
+*.list
+*.lst
+
+
+# =========================================================
+# Linker output
+# =========================================================
+
+*.ilk
 *.exp
 
+
+# =========================================================
 # Libraries
+# =========================================================
+
 *.lib
 *.a
 *.la
 *.lo
 
-# Shared objects
+
+# =========================================================
+# Shared objects / dynamic libraries
+# =========================================================
+
 *.dll
 *.so
 *.so.*
 *.dylib
 
+
+# =========================================================
 # Executables
+# =========================================================
+
 *.exe
 *.out
 *.app
 *.i*86
 *.x86_64
-*.hex
-*.bin
 
+
+# =========================================================
 # Debug files
+# =========================================================
+
 *.dSYM/
 *.su
 *.idb
 *.pdb
+
+
+# =========================================================
+# .NET / NuGet
+# =========================================================
+
+*.nupkg
+.nuget/
+packages/
+
+# Keep NuGet build metadata for old packages.config projects
+!packages/build/
+!packages/repositories.config
+
+project.assets.json
+project.nuget.cache
+*.nuget.g.props
+*.nuget.g.targets
+
+
+# =========================================================
+# Test results / coverage
+# =========================================================
+
+[Tt]est[Rr]esult*/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+coverage.cobertura.xml
+
+
+# =========================================================
+# Logs / temporary files
+# =========================================================
+
+*.log
+*.tmp
+*.temp
+*.cache
+
+
+# =========================================================
+# OS-specific files
+# =========================================================
+
+.DS_Store
+Thumbs.db
+desktop.ini
