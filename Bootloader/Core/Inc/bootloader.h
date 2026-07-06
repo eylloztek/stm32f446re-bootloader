@@ -32,5 +32,6 @@
 
 void processBootloaderCommand(void);
 void handleGetVersion(void);
+void handleGetHelp(void);
 
 #endif /* INC_BOOTLOADER_H_ */
