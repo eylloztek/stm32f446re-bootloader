@@ -43,7 +43,13 @@
             this.cBoxComPort = new System.Windows.Forms.ComboBox();
             this.lblComPort = new System.Windows.Forms.Label();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
+            this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.btnGetHelp = new System.Windows.Forms.Button();
+            this.btnGetVer = new System.Windows.Forms.Button();
+            this.txtReceiveMessage = new System.Windows.Forms.TextBox();
+            this.btnClear = new System.Windows.Forms.Button();
             this.grpBoxConnection.SuspendLayout();
+            this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
             // grpBoxConnection
@@ -183,7 +189,7 @@
             this.cBoxComPort.Name = "cBoxComPort";
             this.cBoxComPort.Size = new System.Drawing.Size(142, 28);
             this.cBoxComPort.TabIndex = 1;
-            this.cBoxComPort.Text = "COM1";
+            this.cBoxComPort.Text = "COM5";
             // 
             // lblComPort
             // 
@@ -194,17 +200,74 @@
             this.lblComPort.TabIndex = 0;
             this.lblComPort.Text = "COM";
             // 
+            // serialPort1
+            // 
+            this.serialPort1.DataReceived += new System.IO.Ports.SerialDataReceivedEventHandler(this.serialPort1_DataReceived);
+            // 
+            // groupBox1
+            // 
+            this.groupBox1.Controls.Add(this.btnClear);
+            this.groupBox1.Controls.Add(this.txtReceiveMessage);
+            this.groupBox1.Controls.Add(this.btnGetVer);
+            this.groupBox1.Controls.Add(this.btnGetHelp);
+            this.groupBox1.Location = new System.Drawing.Point(402, 13);
+            this.groupBox1.Name = "groupBox1";
+            this.groupBox1.Size = new System.Drawing.Size(959, 799);
+            this.groupBox1.TabIndex = 1;
+            this.groupBox1.TabStop = false;
+            this.groupBox1.Text = "Commands";
+            // 
+            // btnGetHelp
+            // 
+            this.btnGetHelp.Location = new System.Drawing.Point(6, 29);
+            this.btnGetHelp.Name = "btnGetHelp";
+            this.btnGetHelp.Size = new System.Drawing.Size(109, 37);
+            this.btnGetHelp.TabIndex = 9;
+            this.btnGetHelp.Text = "Get Help";
+            this.btnGetHelp.UseVisualStyleBackColor = true;
+            // 
+            // btnGetVer
+            // 
+            this.btnGetVer.Location = new System.Drawing.Point(6, 72);
+            this.btnGetVer.Name = "btnGetVer";
+            this.btnGetVer.Size = new System.Drawing.Size(109, 37);
+            this.btnGetVer.TabIndex = 10;
+            this.btnGetVer.Text = "Get Version";
+            this.btnGetVer.UseVisualStyleBackColor = true;
+            this.btnGetVer.Click += new System.EventHandler(this.btnGetVer_Click);
+            // 
+            // txtReceiveMessage
+            // 
+            this.txtReceiveMessage.Location = new System.Drawing.Point(211, 29);
+            this.txtReceiveMessage.Multiline = true;
+            this.txtReceiveMessage.Name = "txtReceiveMessage";
+            this.txtReceiveMessage.Size = new System.Drawing.Size(425, 167);
+            this.txtReceiveMessage.TabIndex = 11;
+            // 
+            // btnClear
+            // 
+            this.btnClear.Location = new System.Drawing.Point(375, 207);
+            this.btnClear.Name = "btnClear";
+            this.btnClear.Size = new System.Drawing.Size(109, 37);
+            this.btnClear.TabIndex = 12;
+            this.btnClear.Text = "Clear";
+            this.btnClear.UseVisualStyleBackColor = true;
+            this.btnClear.Click += new System.EventHandler(this.btnClear_Click);
+            // 
             // STM32Flasher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1037, 746);
+            this.ClientSize = new System.Drawing.Size(1373, 824);
+            this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.grpBoxConnection);
             this.Name = "STM32Flasher";
             this.Text = "STM32Flasher";
             this.Load += new System.EventHandler(this.STM32Flasher_Load);
             this.grpBoxConnection.ResumeLayout(false);
             this.grpBoxConnection.PerformLayout();
+            this.groupBox1.ResumeLayout(false);
+            this.groupBox1.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -225,6 +288,11 @@
         private System.Windows.Forms.Button btnConnect;
         private System.Windows.Forms.ProgressBar prgBarStatus;
         private System.IO.Ports.SerialPort serialPort1;
+        private System.Windows.Forms.GroupBox groupBox1;
+        private System.Windows.Forms.Button btnClear;
+        private System.Windows.Forms.TextBox txtReceiveMessage;
+        private System.Windows.Forms.Button btnGetVer;
+        private System.Windows.Forms.Button btnGetHelp;
     }
 }
 

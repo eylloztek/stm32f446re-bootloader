@@ -18,6 +18,21 @@ namespace STM32Flasher
             InitializeComponent();
         }
 
+        public enum BootloaderCommand : byte
+        {
+            GetHelp = 0x00,
+            GetVersion = 0x01,
+            GetID = 0x02,
+            ReadMemory = 0x011,
+            Go = 0x21,
+            WriteMemory = 0x31,
+            Erase = 0x43,
+            WriteProtect = 0x63,
+            ReadoutProtect = 0x82,
+            GetChecksum = 0xA1,
+            Reset = 0x89
+        }
+
         private void STM32Flasher_Load(object sender, EventArgs e)
         {
             String[] ports = SerialPort.GetPortNames();
@@ -43,6 +58,7 @@ namespace STM32Flasher
                 cBoxComPort.Enabled = false;
                 lblConnectionStatus.Text = "Successful";
                 prgBarStatus.Value = 100;
+                txtReceiveMessage.Text = string.Empty;
             }
             catch (Exception ex){
                 MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -63,7 +79,74 @@ namespace STM32Flasher
                 cBoxComPort.Enabled = true;
                 lblConnectionStatus.Text = "Unsuccessful";
                 prgBarStatus.Value = 0;
+                txtReceiveMessage.Text = string.Empty;
             }
         }
+
+        byte calculateCRC(byte[] data)
+        {
+            byte crc = 0x00;
+            foreach (byte b in data)
+            {
+                crc ^= b;   
+            }
+            return crc;
+        }
+
+        private void SendBootLoaderCommand(byte cmd, byte[] data)
+        {
+            List<byte> packet = new List<byte>();
+            packet.Add(0x7F); //bootloader header
+            packet.Add((byte)(1 + data.Length)); //len = cmd + data
+            packet.Add(cmd);
+            packet.AddRange(data);
+
+            byte[] crcInput = packet.Skip(1).ToArray();
+            byte crc = calculateCRC(crcInput);
+            packet.Add(crc); //CRC
+
+            if (serialPort1.IsOpen)
+            {
+                serialPort1.Write(packet.ToArray(), 0, packet.Count);
+                serialPort1.Write("\r");
+                serialPort1.Write("\n");
+            }
+
+        
+        }
+        private void serialPort1_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+            try
+            {
+                int bytesToRead = serialPort1.BytesToRead;
+                byte[] buffer = new byte[bytesToRead];
+                serialPort1.Read(buffer, 0, bytesToRead);
+
+                string hexOutput = BitConverter.ToString(buffer).Replace("-", " ");
+
+                this.Invoke(new Action(() =>
+                {
+                    txtReceiveMessage.AppendText(hexOutput + Environment.NewLine);
+                    txtReceiveMessage.SelectionStart = txtReceiveMessage.TextLength;
+                    txtReceiveMessage.ScrollToCaret();
+                }));
+
+            } catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+        }
+
+        private void btnClear_Click(object sender, EventArgs e)
+        {
+            txtReceiveMessage.Text = string.Empty;
+        }
+        private void btnGetVer_Click(object sender, EventArgs e)
+        {
+            byte cmd = (byte)BootloaderCommand.GetVersion;
+            SendBootLoaderCommand(cmd, new byte[0]);
+        }
+
     }
 }
