@@ -1,0 +1,81 @@
+# =============================================================================
+# GitHub Linguist configuration
+# Purpose:
+# - Exclude STM32CubeIDE / CubeMX vendor code from GitHub language statistics
+# - Keep user-written Core/, App/, Src/, Python, C#, etc. code detectable
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# STM32Cube / ST vendor code
+# -----------------------------------------------------------------------------
+# STM32 HAL, LL, CMSIS and driver files provided by ST.
+# These are usually not part of the user-written application code.
+Drivers/** linguist-vendored
+**/Drivers/** linguist-vendored
+
+# STM32Cube middleware packages such as USB, FATFS, FreeRTOS, LwIP, TouchGFX, etc.
+# Remove these lines if you keep large amounts of custom code under Middlewares/.
+Middlewares/** linguist-vendored
+**/Middlewares/** linguist-vendored
+
+
+# -----------------------------------------------------------------------------
+# STM32CubeIDE / CubeMX project and generated files
+# -----------------------------------------------------------------------------
+# .ioc files are project configuration files, not source code.
+*.ioc linguist-documentation
+**/*.ioc linguist-documentation
+
+# Eclipse / STM32CubeIDE metadata files
+.project linguist-generated
+.cproject linguist-generated
+.mxproject linguist-generated
+.settings/** linguist-generated
+
+**/.project linguist-generated
+**/.cproject linguist-generated
+**/.mxproject linguist-generated
+**/.settings/** linguist-generated
+
+# Launch/debug configuration files
+*.launch linguist-generated
+**/*.launch linguist-generated
+
+
+# -----------------------------------------------------------------------------
+# Build output directories
+# These should normally be ignored with .gitignore.
+# If they are accidentally committed, they should not affect language statistics.
+# -----------------------------------------------------------------------------
+Debug/** linguist-generated
+Release/** linguist-generated
+build/** linguist-generated
+cmake-build-*/** linguist-generated
+
+**/Debug/** linguist-generated
+**/Release/** linguist-generated
+**/build/** linguist-generated
+**/cmake-build-*/** linguist-generated
+
+
+# -----------------------------------------------------------------------------
+# .NET / C# / Windows Forms generated files
+# Application C# code remains detectable.
+# Designer files and build artifacts are excluded.
+# -----------------------------------------------------------------------------
+**/bin/** linguist-generated
+**/obj/** linguist-generated
+**/.vs/** linguist-generated
+
+*.Designer.cs linguist-generated
+**/*.Designer.cs linguist-generated
+
+*.g.cs linguist-generated
+**/*.g.cs linguist-generated
+
+*.g.i.cs linguist-generated
+**/*.g.i.cs linguist-generated
+
+*.AssemblyInfo.cs linguist-generated
+**/*.AssemblyInfo.cs linguist-generated
