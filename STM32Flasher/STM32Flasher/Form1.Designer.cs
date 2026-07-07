@@ -43,14 +43,19 @@
             this.cBoxComPort = new System.Windows.Forms.ComboBox();
             this.lblComPort = new System.Windows.Forms.Label();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
-            this.groupBox1 = new System.Windows.Forms.GroupBox();
-            this.btnGetHelp = new System.Windows.Forms.Button();
-            this.btnGetVer = new System.Windows.Forms.Button();
-            this.txtReceiveMessage = new System.Windows.Forms.TextBox();
-            this.btnClear = new System.Windows.Forms.Button();
+            this.grpBoxCommands = new System.Windows.Forms.GroupBox();
             this.btnGetID = new System.Windows.Forms.Button();
+            this.btnClear = new System.Windows.Forms.Button();
+            this.txtReceiveMessage = new System.Windows.Forms.TextBox();
+            this.btnGetVer = new System.Windows.Forms.Button();
+            this.btnGetHelp = new System.Windows.Forms.Button();
+            this.btnReadMemory = new System.Windows.Forms.Button();
+            this.lblAddress = new System.Windows.Forms.Label();
+            this.lblLength = new System.Windows.Forms.Label();
+            this.txtAddress = new System.Windows.Forms.TextBox();
+            this.txtLength = new System.Windows.Forms.TextBox();
             this.grpBoxConnection.SuspendLayout();
-            this.groupBox1.SuspendLayout();
+            this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
             // 
             // grpBoxConnection
@@ -205,51 +210,38 @@
             // 
             this.serialPort1.DataReceived += new System.IO.Ports.SerialDataReceivedEventHandler(this.serialPort1_DataReceived);
             // 
-            // groupBox1
+            // grpBoxCommands
             // 
-            this.groupBox1.Controls.Add(this.btnGetID);
-            this.groupBox1.Controls.Add(this.btnClear);
-            this.groupBox1.Controls.Add(this.txtReceiveMessage);
-            this.groupBox1.Controls.Add(this.btnGetVer);
-            this.groupBox1.Controls.Add(this.btnGetHelp);
-            this.groupBox1.Location = new System.Drawing.Point(402, 13);
-            this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(959, 799);
-            this.groupBox1.TabIndex = 1;
-            this.groupBox1.TabStop = false;
-            this.groupBox1.Text = "Commands";
+            this.grpBoxCommands.Controls.Add(this.txtLength);
+            this.grpBoxCommands.Controls.Add(this.txtAddress);
+            this.grpBoxCommands.Controls.Add(this.lblLength);
+            this.grpBoxCommands.Controls.Add(this.lblAddress);
+            this.grpBoxCommands.Controls.Add(this.btnReadMemory);
+            this.grpBoxCommands.Controls.Add(this.btnGetID);
+            this.grpBoxCommands.Controls.Add(this.btnClear);
+            this.grpBoxCommands.Controls.Add(this.txtReceiveMessage);
+            this.grpBoxCommands.Controls.Add(this.btnGetVer);
+            this.grpBoxCommands.Controls.Add(this.btnGetHelp);
+            this.grpBoxCommands.Location = new System.Drawing.Point(402, 13);
+            this.grpBoxCommands.Name = "grpBoxCommands";
+            this.grpBoxCommands.Size = new System.Drawing.Size(1016, 799);
+            this.grpBoxCommands.TabIndex = 1;
+            this.grpBoxCommands.TabStop = false;
+            this.grpBoxCommands.Text = "Commands";
             // 
-            // btnGetHelp
+            // btnGetID
             // 
-            this.btnGetHelp.Location = new System.Drawing.Point(6, 29);
-            this.btnGetHelp.Name = "btnGetHelp";
-            this.btnGetHelp.Size = new System.Drawing.Size(109, 37);
-            this.btnGetHelp.TabIndex = 9;
-            this.btnGetHelp.Text = "Get Help";
-            this.btnGetHelp.UseVisualStyleBackColor = true;
-            this.btnGetHelp.Click += new System.EventHandler(this.btnGetHelp_Click);
-            // 
-            // btnGetVer
-            // 
-            this.btnGetVer.Location = new System.Drawing.Point(6, 72);
-            this.btnGetVer.Name = "btnGetVer";
-            this.btnGetVer.Size = new System.Drawing.Size(109, 37);
-            this.btnGetVer.TabIndex = 10;
-            this.btnGetVer.Text = "Get Version";
-            this.btnGetVer.UseVisualStyleBackColor = true;
-            this.btnGetVer.Click += new System.EventHandler(this.btnGetVer_Click);
-            // 
-            // txtReceiveMessage
-            // 
-            this.txtReceiveMessage.Location = new System.Drawing.Point(211, 29);
-            this.txtReceiveMessage.Multiline = true;
-            this.txtReceiveMessage.Name = "txtReceiveMessage";
-            this.txtReceiveMessage.Size = new System.Drawing.Size(425, 167);
-            this.txtReceiveMessage.TabIndex = 11;
+            this.btnGetID.Location = new System.Drawing.Point(6, 115);
+            this.btnGetID.Name = "btnGetID";
+            this.btnGetID.Size = new System.Drawing.Size(128, 37);
+            this.btnGetID.TabIndex = 13;
+            this.btnGetID.Text = "Get ID";
+            this.btnGetID.UseVisualStyleBackColor = true;
+            this.btnGetID.Click += new System.EventHandler(this.btnGetID_Click);
             // 
             // btnClear
             // 
-            this.btnClear.Location = new System.Drawing.Point(375, 207);
+            this.btnClear.Location = new System.Drawing.Point(690, 203);
             this.btnClear.Name = "btnClear";
             this.btnClear.Size = new System.Drawing.Size(109, 37);
             this.btnClear.TabIndex = 12;
@@ -257,30 +249,90 @@
             this.btnClear.UseVisualStyleBackColor = true;
             this.btnClear.Click += new System.EventHandler(this.btnClear_Click);
             // 
-            // btnGetID
+            // txtReceiveMessage
             // 
-            this.btnGetID.Location = new System.Drawing.Point(6, 115);
-            this.btnGetID.Name = "btnGetID";
-            this.btnGetID.Size = new System.Drawing.Size(109, 37);
-            this.btnGetID.TabIndex = 13;
-            this.btnGetID.Text = "Get ID";
-            this.btnGetID.UseVisualStyleBackColor = true;
-            this.btnGetID.Click += new System.EventHandler(this.btnGetID_Click);
+            this.txtReceiveMessage.Location = new System.Drawing.Point(527, 25);
+            this.txtReceiveMessage.Multiline = true;
+            this.txtReceiveMessage.Name = "txtReceiveMessage";
+            this.txtReceiveMessage.Size = new System.Drawing.Size(425, 167);
+            this.txtReceiveMessage.TabIndex = 11;
+            // 
+            // btnGetVer
+            // 
+            this.btnGetVer.Location = new System.Drawing.Point(6, 72);
+            this.btnGetVer.Name = "btnGetVer";
+            this.btnGetVer.Size = new System.Drawing.Size(128, 37);
+            this.btnGetVer.TabIndex = 10;
+            this.btnGetVer.Text = "Get Version";
+            this.btnGetVer.UseVisualStyleBackColor = true;
+            this.btnGetVer.Click += new System.EventHandler(this.btnGetVer_Click);
+            // 
+            // btnGetHelp
+            // 
+            this.btnGetHelp.Location = new System.Drawing.Point(6, 29);
+            this.btnGetHelp.Name = "btnGetHelp";
+            this.btnGetHelp.Size = new System.Drawing.Size(128, 37);
+            this.btnGetHelp.TabIndex = 9;
+            this.btnGetHelp.Text = "Get Help";
+            this.btnGetHelp.UseVisualStyleBackColor = true;
+            this.btnGetHelp.Click += new System.EventHandler(this.btnGetHelp_Click);
+            // 
+            // btnReadMemory
+            // 
+            this.btnReadMemory.Location = new System.Drawing.Point(6, 204);
+            this.btnReadMemory.Name = "btnReadMemory";
+            this.btnReadMemory.Size = new System.Drawing.Size(128, 37);
+            this.btnReadMemory.TabIndex = 14;
+            this.btnReadMemory.Text = "Read Memory";
+            this.btnReadMemory.UseVisualStyleBackColor = true;
+            this.btnReadMemory.Click += new System.EventHandler(this.btnReadMemory_Click);
+            // 
+            // lblAddress
+            // 
+            this.lblAddress.AutoSize = true;
+            this.lblAddress.Location = new System.Drawing.Point(194, 190);
+            this.lblAddress.Name = "lblAddress";
+            this.lblAddress.Size = new System.Drawing.Size(68, 20);
+            this.lblAddress.TabIndex = 15;
+            this.lblAddress.Text = "Address";
+            // 
+            // lblLength
+            // 
+            this.lblLength.AutoSize = true;
+            this.lblLength.Location = new System.Drawing.Point(356, 190);
+            this.lblLength.Name = "lblLength";
+            this.lblLength.Size = new System.Drawing.Size(59, 20);
+            this.lblLength.TabIndex = 16;
+            this.lblLength.Text = "Length";
+            // 
+            // txtAddress
+            // 
+            this.txtAddress.Location = new System.Drawing.Point(169, 213);
+            this.txtAddress.Name = "txtAddress";
+            this.txtAddress.Size = new System.Drawing.Size(120, 26);
+            this.txtAddress.TabIndex = 17;
+            // 
+            // txtLength
+            // 
+            this.txtLength.Location = new System.Drawing.Point(340, 213);
+            this.txtLength.Name = "txtLength";
+            this.txtLength.Size = new System.Drawing.Size(102, 26);
+            this.txtLength.TabIndex = 18;
             // 
             // STM32Flasher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1373, 824);
-            this.Controls.Add(this.groupBox1);
+            this.ClientSize = new System.Drawing.Size(1430, 824);
+            this.Controls.Add(this.grpBoxCommands);
             this.Controls.Add(this.grpBoxConnection);
             this.Name = "STM32Flasher";
             this.Text = "STM32Flasher";
             this.Load += new System.EventHandler(this.STM32Flasher_Load);
             this.grpBoxConnection.ResumeLayout(false);
             this.grpBoxConnection.PerformLayout();
-            this.groupBox1.ResumeLayout(false);
-            this.groupBox1.PerformLayout();
+            this.grpBoxCommands.ResumeLayout(false);
+            this.grpBoxCommands.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -301,12 +353,17 @@
         private System.Windows.Forms.Button btnConnect;
         private System.Windows.Forms.ProgressBar prgBarStatus;
         private System.IO.Ports.SerialPort serialPort1;
-        private System.Windows.Forms.GroupBox groupBox1;
+        private System.Windows.Forms.GroupBox grpBoxCommands;
         private System.Windows.Forms.Button btnClear;
         private System.Windows.Forms.TextBox txtReceiveMessage;
         private System.Windows.Forms.Button btnGetVer;
         private System.Windows.Forms.Button btnGetHelp;
         private System.Windows.Forms.Button btnGetID;
+        private System.Windows.Forms.Label lblLength;
+        private System.Windows.Forms.Label lblAddress;
+        private System.Windows.Forms.Button btnReadMemory;
+        private System.Windows.Forms.TextBox txtLength;
+        private System.Windows.Forms.TextBox txtAddress;
     }
 }
 

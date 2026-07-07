@@ -159,5 +159,60 @@ namespace STM32Flasher
             byte cmd = (byte)BootloaderCommand.GetID;
             SendBootLoaderCommand(cmd, new byte[0]);
         }
+
+        private void sendReadMemoryData(uint address, byte length)
+        {
+            byte[] data = new byte[7];
+            //address -> msb to lsb
+            data[0] = (byte)((address>>24) & 0xFF); //msb
+            data[1] = (byte)((address >> 16) & 0xFF);
+            data[2] = (byte)((address >> 8) & 0xFF);
+            data[3] = (byte)(address & 0xFF);
+
+            byte addressCheckSum = (byte)(data[0] ^ data[1] ^ data[2] ^ data[3]);
+            data[4] = addressCheckSum;
+            data[5] = length;
+            data[6] = (byte)-length; //length complement
+
+            byte cmd = (byte)BootloaderCommand.ReadMemory;
+            SendBootLoaderCommand(cmd, data);
+        }
+
+        private void btnReadMemory_Click(object sender, EventArgs e)
+        {
+
+            if (txtAddress.Text == "" || txtLength.Text == "")
+            {
+                MessageBox.Show("Please enter the address and the length values.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                string addressText = txtAddress.Text.Trim();
+
+                if (addressText.StartsWith("0x"))
+                {
+                    addressText = addressText.Substring(2);
+                }
+
+                uint address = Convert.ToUInt32(addressText, 16);
+
+                byte length = byte.Parse(txtLength.Text);
+
+                if(length > 255)
+                {
+                    MessageBox.Show("256 bytes maximum", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+                }
+                sendReadMemoryData(address, length);
+
+            } 
+            catch (Exception ex) 
+            {
+                MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); 
+            }
+
+        }
     }
 }
