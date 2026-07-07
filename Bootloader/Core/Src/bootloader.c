@@ -19,8 +19,11 @@ void processBootloaderCommand(void) {
 		handleGetVersion();
 		break;
 	case GET_HELP:
-			handleGetHelp();
-			break;
+		handleGetHelp();
+		break;
+	case GET_ID:
+		handleGetID();
+		break;
 	default:
 		break;
 	}
@@ -47,9 +50,9 @@ void handleGetVersion(void) {
 
 }
 
-void handleGetHelp(void){
+void handleGetHelp(void) {
 	uint8_t commands[] = {
-			GET_HELP, 						//0x00
+	GET_HELP, 						//0x00
 			GET_VERSION,					//0x01
 			GET_ID,							//0x02
 			READ_MEMORY,					//0x11
@@ -59,11 +62,11 @@ void handleGetHelp(void){
 			WRITE_PROTECT_UNPROTECT,		//0x63
 			READOUT_PROTECT_UNPROTECT,		//0x82
 			GET_CHECKSUM,					//0xA1
-	};
+			};
 
 	uint8_t totalCommands = sizeof(commands) / sizeof(commands[0]);
 
-	uint8_t response [1 + 1 + 1 + sizeof(commands)] = {0};
+	uint8_t response[1 + 1 + 1 + sizeof(commands)] = { 0 };
 
 	response[0] = ACK;
 	response[1] = totalCommands;
@@ -80,5 +83,26 @@ void handleGetHelp(void){
 
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
 
+}
+
+void handleGetID(void){
+	uint8_t response[4] = {0};
+	uint32_t IDCode = DBGMCU->IDCODE;
+	uint8_t PIDLSB = IDCode & 0xFF;
+
+	response[0] = ACK;
+	response[1] = 0x01;
+	response[2] = 0x04;
+	response[3] = PIDLSB;
+
+#ifdef DEBUG_PRINT
+	printf("Chip ID Message:\r\n");
+	for (int i = 0; i < sizeof(response); i++) {
+		printf("%02X ", response[i]);
+	}
+	printf("\r\n");
+#endif
+
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
 
 }

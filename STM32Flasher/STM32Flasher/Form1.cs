@@ -148,5 +148,16 @@ namespace STM32Flasher
             SendBootLoaderCommand(cmd, new byte[0]);
         }
 
+        private void btnGetHelp_Click(object sender, EventArgs e)
+        {
+            byte cmd = (byte)BootloaderCommand.GetHelp;
+            SendBootLoaderCommand(cmd, new byte[0]);
+        }
+
+        private void btnGetID_Click(object sender, EventArgs e)
+        {
+            byte cmd = (byte)BootloaderCommand.GetID;
+            SendBootLoaderCommand(cmd, new byte[0]);
+        }
     }
 }

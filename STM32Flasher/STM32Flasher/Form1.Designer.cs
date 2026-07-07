@@ -48,6 +48,7 @@
             this.btnGetVer = new System.Windows.Forms.Button();
             this.txtReceiveMessage = new System.Windows.Forms.TextBox();
             this.btnClear = new System.Windows.Forms.Button();
+            this.btnGetID = new System.Windows.Forms.Button();
             this.grpBoxConnection.SuspendLayout();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
@@ -114,14 +115,14 @@
             // 
             this.cBoxParity.FormattingEnabled = true;
             this.cBoxParity.Items.AddRange(new object[] {
+            "None",
             "Even",
-            "Odd",
-            "None"});
+            "Odd"});
             this.cBoxParity.Location = new System.Drawing.Point(103, 152);
             this.cBoxParity.Name = "cBoxParity";
             this.cBoxParity.Size = new System.Drawing.Size(142, 28);
             this.cBoxParity.TabIndex = 7;
-            this.cBoxParity.Text = "Even";
+            this.cBoxParity.Text = "None";
             // 
             // cBoxStopBits
             // 
@@ -206,6 +207,7 @@
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.btnGetID);
             this.groupBox1.Controls.Add(this.btnClear);
             this.groupBox1.Controls.Add(this.txtReceiveMessage);
             this.groupBox1.Controls.Add(this.btnGetVer);
@@ -225,6 +227,7 @@
             this.btnGetHelp.TabIndex = 9;
             this.btnGetHelp.Text = "Get Help";
             this.btnGetHelp.UseVisualStyleBackColor = true;
+            this.btnGetHelp.Click += new System.EventHandler(this.btnGetHelp_Click);
             // 
             // btnGetVer
             // 
@@ -253,6 +256,16 @@
             this.btnClear.Text = "Clear";
             this.btnClear.UseVisualStyleBackColor = true;
             this.btnClear.Click += new System.EventHandler(this.btnClear_Click);
+            // 
+            // btnGetID
+            // 
+            this.btnGetID.Location = new System.Drawing.Point(6, 115);
+            this.btnGetID.Name = "btnGetID";
+            this.btnGetID.Size = new System.Drawing.Size(109, 37);
+            this.btnGetID.TabIndex = 13;
+            this.btnGetID.Text = "Get ID";
+            this.btnGetID.UseVisualStyleBackColor = true;
+            this.btnGetID.Click += new System.EventHandler(this.btnGetID_Click);
             // 
             // STM32Flasher
             // 
@@ -293,6 +306,7 @@
         private System.Windows.Forms.TextBox txtReceiveMessage;
         private System.Windows.Forms.Button btnGetVer;
         private System.Windows.Forms.Button btnGetHelp;
+        private System.Windows.Forms.Button btnGetID;
     }
 }
 
