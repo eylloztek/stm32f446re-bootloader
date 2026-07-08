@@ -57,6 +57,11 @@
             this.btnSave = new System.Windows.Forms.Button();
             this.btnGoToAddress = new System.Windows.Forms.Button();
             this.txtGoToAddress = new System.Windows.Forms.TextBox();
+            this.btnWriteMem = new System.Windows.Forms.Button();
+            this.txtWriteMem = new System.Windows.Forms.TextBox();
+            this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
+            this.txtBrowseFile = new System.Windows.Forms.TextBox();
+            this.btnBrowse = new System.Windows.Forms.Button();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
@@ -215,6 +220,10 @@
             // 
             // grpBoxCommands
             // 
+            this.grpBoxCommands.Controls.Add(this.btnBrowse);
+            this.grpBoxCommands.Controls.Add(this.txtBrowseFile);
+            this.grpBoxCommands.Controls.Add(this.txtWriteMem);
+            this.grpBoxCommands.Controls.Add(this.btnWriteMem);
             this.grpBoxCommands.Controls.Add(this.txtGoToAddress);
             this.grpBoxCommands.Controls.Add(this.btnGoToAddress);
             this.grpBoxCommands.Controls.Add(this.btnSave);
@@ -352,6 +361,44 @@
             this.txtGoToAddress.Size = new System.Drawing.Size(120, 26);
             this.txtGoToAddress.TabIndex = 21;
             // 
+            // btnWriteMem
+            // 
+            this.btnWriteMem.Location = new System.Drawing.Point(6, 325);
+            this.btnWriteMem.Name = "btnWriteMem";
+            this.btnWriteMem.Size = new System.Drawing.Size(128, 37);
+            this.btnWriteMem.TabIndex = 22;
+            this.btnWriteMem.Text = "Write Memory";
+            this.btnWriteMem.UseVisualStyleBackColor = true;
+            this.btnWriteMem.Click += new System.EventHandler(this.btnWriteMem_Click);
+            // 
+            // txtWriteMem
+            // 
+            this.txtWriteMem.Location = new System.Drawing.Point(169, 330);
+            this.txtWriteMem.Name = "txtWriteMem";
+            this.txtWriteMem.Size = new System.Drawing.Size(120, 26);
+            this.txtWriteMem.TabIndex = 23;
+            // 
+            // openFileDialog1
+            // 
+            this.openFileDialog1.FileName = "openFileDialog1";
+            // 
+            // txtBrowseFile
+            // 
+            this.txtBrowseFile.Location = new System.Drawing.Point(340, 330);
+            this.txtBrowseFile.Name = "txtBrowseFile";
+            this.txtBrowseFile.Size = new System.Drawing.Size(210, 26);
+            this.txtBrowseFile.TabIndex = 24;
+            // 
+            // btnBrowse
+            // 
+            this.btnBrowse.Location = new System.Drawing.Point(576, 325);
+            this.btnBrowse.Name = "btnBrowse";
+            this.btnBrowse.Size = new System.Drawing.Size(128, 37);
+            this.btnBrowse.TabIndex = 25;
+            this.btnBrowse.Text = "Browse";
+            this.btnBrowse.UseVisualStyleBackColor = true;
+            this.btnBrowse.Click += new System.EventHandler(this.btnBrowse_Click);
+            // 
             // STM32Flasher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
@@ -400,6 +447,11 @@
         private System.Windows.Forms.Button btnSave;
         private System.Windows.Forms.TextBox txtGoToAddress;
         private System.Windows.Forms.Button btnGoToAddress;
+        private System.Windows.Forms.Button btnBrowse;
+        private System.Windows.Forms.TextBox txtBrowseFile;
+        private System.Windows.Forms.TextBox txtWriteMem;
+        private System.Windows.Forms.Button btnWriteMem;
+        private System.Windows.Forms.OpenFileDialog openFileDialog1;
     }
 }
 

@@ -30,6 +30,9 @@ void processBootloaderCommand(void) {
 	case GO_TO_ADDRESS:
 		handleGoToAddress();
 		break;
+	case WRITE_MEMORY:
+		handleWriteMemory();
+		break;
 	default:
 		break;
 	}
@@ -195,14 +198,19 @@ void handleGoToAddress(void) {
 	response[0] = ACK;
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
 
-	typedef void (*Function_Pointer) (void);
+	typedef void (*Function_Pointer)(void);
 	uint32_t sp = *((volatile uint32_t*) address);
-	uint32_t pc = *((volatile uint32_t*) (address+4));
+	uint32_t pc = *((volatile uint32_t*) (address + 4));
 
 	__set_MSP(sp);
 
 	Function_Pointer app_start = (Function_Pointer) pc;
 	app_start();
+
+}
+
+void handleWriteMemory(void){
+	uint8_t response[1] = {0};
 
 }
 

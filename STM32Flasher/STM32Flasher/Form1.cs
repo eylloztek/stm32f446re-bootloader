@@ -294,5 +294,128 @@ namespace STM32Flasher
                 MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        string binFilePath;
+        byte[] binData;
+        private void btnBrowse_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "Binary files (*.bin)|*.bin";
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                txtBrowseFile.Text = openFileDialog.FileName;
+                binFilePath = txtBrowseFile.Text;
+                binData = File.ReadAllBytes(binFilePath);
+            }
+        }
+
+        private void sendWriteMemoryData(uint address)
+        {
+            byte[] data = new byte[9];
+
+            byte[] lengthBytes = new byte[4];
+            int length = binData.Length;
+
+            // length-> msb to lsb
+            lengthBytes[0] = (byte)((length >> 24) & 0xFF);
+            lengthBytes[1] = (byte)((length >> 16) & 0xFF);
+            lengthBytes[2] = (byte)((length >> 8) & 0xFF);
+            lengthBytes[3] = (byte)(length & 0xFF);
+
+
+            // address-> msb to lsb
+            data[0] = (byte)((address >> 24) & 0xFF);
+            data[1] = (byte)((address >> 16) & 0xFF);
+            data[2] = (byte)((address >> 8) & 0xFF);
+            data[3] = (byte)(address & 0xFF);
+
+            byte adddressCheckSum = (byte)(data[0] ^ data[1] ^ data[2] ^ data[3]);
+            data[4] = adddressCheckSum; //address checksum
+
+            data[5] = lengthBytes[0];
+            data[6] = lengthBytes[1];
+            data[7] = lengthBytes[2];
+            data[8] = lengthBytes[3];
+
+            byte cmd = (byte)BootloaderCommand.WriteMemory;
+            SendBootLoaderCommand(cmd, data);
+
+            sendDataBlocks(address);
+
+        }
+
+        private void sendDataBlocks(uint startAddress)
+        {
+            int offset = 0;
+            //int blockSize = 256;
+
+            while (offset < binData.Length)
+            {
+
+                int remaining = binData.Length - offset;
+                int currentBlockSize = remaining > 256 ? 256 : remaining;
+
+                byte N = (byte)(currentBlockSize - 1);
+                byte[] packet = new byte[currentBlockSize + 2];
+                packet[0] = N;
+
+                Array.Copy(binData, offset, packet, 1, currentBlockSize);
+
+                byte checkSum = N;
+                for (int i = 1; i <= currentBlockSize; i++)
+                {
+                    checkSum ^= packet[i];
+                }
+
+                packet[packet.Length - 1] = checkSum;
+
+                sendBytesToSTM32(packet);
+
+                offset += currentBlockSize;
+                startAddress += (uint)currentBlockSize;
+                System.Threading.Thread.Sleep(10);
+            }
+
+        }
+
+        private void sendBytesToSTM32(byte[] data)
+        {
+            if (serialPort1.IsOpen)
+            {
+                serialPort1.Write(data, 0, data.Length);
+            }
+            else
+            {
+                MessageBox.Show("Serial Port is not Open!");
+            }
+
+        }
+
+        private void btnWriteMem_Click(object sender, EventArgs e)
+        {
+            if (txtWriteMem.Text == "" || txtBrowseFile.Text == "")
+            {
+                MessageBox.Show("Please enter the address and select the bin file", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                string addressText = txtWriteMem.Text.Trim();
+
+                if (addressText.StartsWith("0x"))
+                {
+                    addressText = addressText.Substring(2);
+                }
+                uint address = Convert.ToUInt32(addressText, 16);
+
+                sendWriteMemoryData(address);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 }
