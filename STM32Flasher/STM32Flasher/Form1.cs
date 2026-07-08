@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text;
@@ -13,6 +14,7 @@ namespace STM32Flasher
 {
     public partial class STM32Flasher : Form
     {
+        List<byte> receivedData = new List<byte>();
         public STM32Flasher()
         {
             InitializeComponent();
@@ -122,6 +124,8 @@ namespace STM32Flasher
                 byte[] buffer = new byte[bytesToRead];
                 serialPort1.Read(buffer, 0, bytesToRead);
 
+                receivedData.AddRange(buffer);
+
                 string hexOutput = BitConverter.ToString(buffer).Replace("-", " ");
 
                 this.Invoke(new Action(() =>
@@ -215,6 +219,38 @@ namespace STM32Flasher
                 MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); 
             }
 
+        }
+
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            if (receivedData == null || receivedData.Count == 0)
+            {
+                MessageBox.Show("No data received to save.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.Filter = "Binary files (*.bin)|*.bin";
+                saveFileDialog.Title = "Save Binary File";
+                saveFileDialog.FileName = "output.bin";
+
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        byte[] dataToSave = receivedData.Skip(1).ToArray();
+                        File.WriteAllBytes(saveFileDialog.FileName, dataToSave);
+                        MessageBox.Show("Data saved successfully.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        receivedData.Clear();
+                        txtReceiveMessage.Text = "";
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error while saving: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
         }
     }
 }

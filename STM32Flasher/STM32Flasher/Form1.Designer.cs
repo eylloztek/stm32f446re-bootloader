@@ -44,16 +44,17 @@
             this.lblComPort = new System.Windows.Forms.Label();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
             this.grpBoxCommands = new System.Windows.Forms.GroupBox();
+            this.txtLength = new System.Windows.Forms.TextBox();
+            this.txtAddress = new System.Windows.Forms.TextBox();
+            this.lblLength = new System.Windows.Forms.Label();
+            this.lblAddress = new System.Windows.Forms.Label();
+            this.btnReadMemory = new System.Windows.Forms.Button();
             this.btnGetID = new System.Windows.Forms.Button();
             this.btnClear = new System.Windows.Forms.Button();
             this.txtReceiveMessage = new System.Windows.Forms.TextBox();
             this.btnGetVer = new System.Windows.Forms.Button();
             this.btnGetHelp = new System.Windows.Forms.Button();
-            this.btnReadMemory = new System.Windows.Forms.Button();
-            this.lblAddress = new System.Windows.Forms.Label();
-            this.lblLength = new System.Windows.Forms.Label();
-            this.txtAddress = new System.Windows.Forms.TextBox();
-            this.txtLength = new System.Windows.Forms.TextBox();
+            this.btnSave = new System.Windows.Forms.Button();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
@@ -212,6 +213,7 @@
             // 
             // grpBoxCommands
             // 
+            this.grpBoxCommands.Controls.Add(this.btnSave);
             this.grpBoxCommands.Controls.Add(this.txtLength);
             this.grpBoxCommands.Controls.Add(this.txtAddress);
             this.grpBoxCommands.Controls.Add(this.lblLength);
@@ -229,6 +231,48 @@
             this.grpBoxCommands.TabStop = false;
             this.grpBoxCommands.Text = "Commands";
             // 
+            // txtLength
+            // 
+            this.txtLength.Location = new System.Drawing.Point(340, 213);
+            this.txtLength.Name = "txtLength";
+            this.txtLength.Size = new System.Drawing.Size(102, 26);
+            this.txtLength.TabIndex = 18;
+            // 
+            // txtAddress
+            // 
+            this.txtAddress.Location = new System.Drawing.Point(169, 213);
+            this.txtAddress.Name = "txtAddress";
+            this.txtAddress.Size = new System.Drawing.Size(120, 26);
+            this.txtAddress.TabIndex = 17;
+            // 
+            // lblLength
+            // 
+            this.lblLength.AutoSize = true;
+            this.lblLength.Location = new System.Drawing.Point(356, 190);
+            this.lblLength.Name = "lblLength";
+            this.lblLength.Size = new System.Drawing.Size(59, 20);
+            this.lblLength.TabIndex = 16;
+            this.lblLength.Text = "Length";
+            // 
+            // lblAddress
+            // 
+            this.lblAddress.AutoSize = true;
+            this.lblAddress.Location = new System.Drawing.Point(194, 190);
+            this.lblAddress.Name = "lblAddress";
+            this.lblAddress.Size = new System.Drawing.Size(68, 20);
+            this.lblAddress.TabIndex = 15;
+            this.lblAddress.Text = "Address";
+            // 
+            // btnReadMemory
+            // 
+            this.btnReadMemory.Location = new System.Drawing.Point(6, 204);
+            this.btnReadMemory.Name = "btnReadMemory";
+            this.btnReadMemory.Size = new System.Drawing.Size(128, 37);
+            this.btnReadMemory.TabIndex = 14;
+            this.btnReadMemory.Text = "Read Memory";
+            this.btnReadMemory.UseVisualStyleBackColor = true;
+            this.btnReadMemory.Click += new System.EventHandler(this.btnReadMemory_Click);
+            // 
             // btnGetID
             // 
             this.btnGetID.Location = new System.Drawing.Point(6, 115);
@@ -241,7 +285,7 @@
             // 
             // btnClear
             // 
-            this.btnClear.Location = new System.Drawing.Point(690, 203);
+            this.btnClear.Location = new System.Drawing.Point(741, 202);
             this.btnClear.Name = "btnClear";
             this.btnClear.Size = new System.Drawing.Size(109, 37);
             this.btnClear.TabIndex = 12;
@@ -251,7 +295,7 @@
             // 
             // txtReceiveMessage
             // 
-            this.txtReceiveMessage.Location = new System.Drawing.Point(527, 25);
+            this.txtReceiveMessage.Location = new System.Drawing.Point(576, 25);
             this.txtReceiveMessage.Multiline = true;
             this.txtReceiveMessage.Name = "txtReceiveMessage";
             this.txtReceiveMessage.Size = new System.Drawing.Size(425, 167);
@@ -277,47 +321,15 @@
             this.btnGetHelp.UseVisualStyleBackColor = true;
             this.btnGetHelp.Click += new System.EventHandler(this.btnGetHelp_Click);
             // 
-            // btnReadMemory
+            // btnSave
             // 
-            this.btnReadMemory.Location = new System.Drawing.Point(6, 204);
-            this.btnReadMemory.Name = "btnReadMemory";
-            this.btnReadMemory.Size = new System.Drawing.Size(128, 37);
-            this.btnReadMemory.TabIndex = 14;
-            this.btnReadMemory.Text = "Read Memory";
-            this.btnReadMemory.UseVisualStyleBackColor = true;
-            this.btnReadMemory.Click += new System.EventHandler(this.btnReadMemory_Click);
-            // 
-            // lblAddress
-            // 
-            this.lblAddress.AutoSize = true;
-            this.lblAddress.Location = new System.Drawing.Point(194, 190);
-            this.lblAddress.Name = "lblAddress";
-            this.lblAddress.Size = new System.Drawing.Size(68, 20);
-            this.lblAddress.TabIndex = 15;
-            this.lblAddress.Text = "Address";
-            // 
-            // lblLength
-            // 
-            this.lblLength.AutoSize = true;
-            this.lblLength.Location = new System.Drawing.Point(356, 190);
-            this.lblLength.Name = "lblLength";
-            this.lblLength.Size = new System.Drawing.Size(59, 20);
-            this.lblLength.TabIndex = 16;
-            this.lblLength.Text = "Length";
-            // 
-            // txtAddress
-            // 
-            this.txtAddress.Location = new System.Drawing.Point(169, 213);
-            this.txtAddress.Name = "txtAddress";
-            this.txtAddress.Size = new System.Drawing.Size(120, 26);
-            this.txtAddress.TabIndex = 17;
-            // 
-            // txtLength
-            // 
-            this.txtLength.Location = new System.Drawing.Point(340, 213);
-            this.txtLength.Name = "txtLength";
-            this.txtLength.Size = new System.Drawing.Size(102, 26);
-            this.txtLength.TabIndex = 18;
+            this.btnSave.Location = new System.Drawing.Point(470, 204);
+            this.btnSave.Name = "btnSave";
+            this.btnSave.Size = new System.Drawing.Size(128, 37);
+            this.btnSave.TabIndex = 19;
+            this.btnSave.Text = "Save";
+            this.btnSave.UseVisualStyleBackColor = true;
+            this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
             // STM32Flasher
             // 
@@ -364,6 +376,7 @@
         private System.Windows.Forms.Button btnReadMemory;
         private System.Windows.Forms.TextBox txtLength;
         private System.Windows.Forms.TextBox txtAddress;
+        private System.Windows.Forms.Button btnSave;
     }
 }
 
