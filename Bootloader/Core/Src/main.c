@@ -83,6 +83,9 @@ void JumpToApplication(void) {
 
 	AppResetHandler = (void (*) (void)) APP_RESET_HANDLER;
 	AppResetHandler();
+
+
+
 }
 
 void uartSend(char *message) {

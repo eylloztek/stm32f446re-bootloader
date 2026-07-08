@@ -27,6 +27,9 @@ void processBootloaderCommand(void) {
 	case READ_MEMORY:
 		handleReadMemory();
 		break;
+	case GO_TO_ADDRESS:
+		handleGoToAddress();
+		break;
 	default:
 		break;
 	}
@@ -112,13 +115,16 @@ void handleGetID(void) {
 
 void handleReadMemory(void) {
 	uint8_t response[1] = { 0 };
+	uint8_t offset = 3;
 
-	uint32_t address = (messageBuffer[3] << 24) | (messageBuffer[4] << 16)
-			| (messageBuffer[5] << 8) | (messageBuffer[6]);
+	uint32_t address = (messageBuffer[offset] << 24)
+			| (messageBuffer[offset + 1] << 16)
+			| (messageBuffer[offset + 2] << 8) | (messageBuffer[offset + 3]);
 
-	uint8_t addressChecksum = messageBuffer[7];
-	uint8_t calculatedChecksum = (messageBuffer[3]) ^ (messageBuffer[4])
-			^ (messageBuffer[5]) ^ (messageBuffer[6]);
+	uint8_t addressChecksum = messageBuffer[offset + 4];
+	uint8_t calculatedChecksum = (messageBuffer[offset])
+			^ (messageBuffer[offset + 1]) ^ (messageBuffer[offset + 2])
+			^ (messageBuffer[offset + 3]);
 
 	if (addressChecksum != calculatedChecksum) {
 		response[0] = NACK;
@@ -126,8 +132,8 @@ void handleReadMemory(void) {
 		return;
 	}
 
-	uint8_t N = messageBuffer[8];
-	uint8_t NComplement = messageBuffer[9];
+	uint8_t N = messageBuffer[offset + 5];
+	uint8_t NComplement = messageBuffer[offset + 6];
 
 #ifdef DEBUG_PRINT
 	printf("N: 0x%02X\r\n", N);
@@ -141,9 +147,9 @@ void handleReadMemory(void) {
 		return;
 	}
 
-	uint8_t addressIsInvalid = verifyAddress(address);
+	uint8_t addressIsValid = verifyAddress(address);
 
-	if (!addressIsInvalid) {
+	if (!addressIsValid) {
 		response[0] = NACK;
 		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
 		return;
@@ -156,6 +162,47 @@ void handleReadMemory(void) {
 	uint8_t buffer[256];
 	memcpy(buffer, (uint8_t*) address, numberOfBytes);
 	HAL_UART_Transmit(UART_PORT, buffer, numberOfBytes, HAL_MAX_DELAY);
+
+}
+
+void handleGoToAddress(void) {
+	uint8_t response[1] = { 0 };
+	uint8_t offset = 3;
+
+	uint32_t address = (messageBuffer[offset] << 24)
+			| (messageBuffer[offset + 1] << 16)
+			| (messageBuffer[offset + 2] << 8) | (messageBuffer[offset + 3]);
+
+	uint8_t addressChecksum = messageBuffer[offset + 4];
+	uint8_t calculatedChecksum = (messageBuffer[offset])
+			^ (messageBuffer[offset + 1]) ^ (messageBuffer[offset + 2])
+			^ (messageBuffer[offset + 3]);
+
+	if (addressChecksum != calculatedChecksum) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	uint8_t addressIsValid = verifyAddress(address);
+
+	if (!addressIsValid) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	response[0] = ACK;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+
+	typedef void (*Function_Pointer) (void);
+	uint32_t sp = *((volatile uint32_t*) address);
+	uint32_t pc = *((volatile uint32_t*) (address+4));
+
+	__set_MSP(sp);
+
+	Function_Pointer app_start = (Function_Pointer) pc;
+	app_start();
 
 }
 

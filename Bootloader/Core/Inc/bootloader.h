@@ -40,5 +40,6 @@ void handleGetHelp(void);
 void handleGetID(void);
 void handleReadMemory(void);
 uint8_t verifyAddress(uint32_t address);
+void handleGoToAddress(void);
 
 #endif /* INC_BOOTLOADER_H_ */

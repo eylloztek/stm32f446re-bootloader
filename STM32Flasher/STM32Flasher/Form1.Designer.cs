@@ -55,6 +55,8 @@
             this.btnGetVer = new System.Windows.Forms.Button();
             this.btnGetHelp = new System.Windows.Forms.Button();
             this.btnSave = new System.Windows.Forms.Button();
+            this.btnGoToAddress = new System.Windows.Forms.Button();
+            this.txtGoToAddress = new System.Windows.Forms.TextBox();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
@@ -213,6 +215,8 @@
             // 
             // grpBoxCommands
             // 
+            this.grpBoxCommands.Controls.Add(this.txtGoToAddress);
+            this.grpBoxCommands.Controls.Add(this.btnGoToAddress);
             this.grpBoxCommands.Controls.Add(this.btnSave);
             this.grpBoxCommands.Controls.Add(this.txtLength);
             this.grpBoxCommands.Controls.Add(this.txtAddress);
@@ -331,6 +335,23 @@
             this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
+            // btnGoToAddress
+            // 
+            this.btnGoToAddress.Location = new System.Drawing.Point(6, 264);
+            this.btnGoToAddress.Name = "btnGoToAddress";
+            this.btnGoToAddress.Size = new System.Drawing.Size(128, 37);
+            this.btnGoToAddress.TabIndex = 20;
+            this.btnGoToAddress.Text = "Go To Address";
+            this.btnGoToAddress.UseVisualStyleBackColor = true;
+            this.btnGoToAddress.Click += new System.EventHandler(this.btnGoToAddress_Click);
+            // 
+            // txtGoToAddress
+            // 
+            this.txtGoToAddress.Location = new System.Drawing.Point(169, 269);
+            this.txtGoToAddress.Name = "txtGoToAddress";
+            this.txtGoToAddress.Size = new System.Drawing.Size(120, 26);
+            this.txtGoToAddress.TabIndex = 21;
+            // 
             // STM32Flasher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
@@ -377,6 +398,8 @@
         private System.Windows.Forms.TextBox txtLength;
         private System.Windows.Forms.TextBox txtAddress;
         private System.Windows.Forms.Button btnSave;
+        private System.Windows.Forms.TextBox txtGoToAddress;
+        private System.Windows.Forms.Button btnGoToAddress;
     }
 }
 

@@ -252,5 +252,47 @@ namespace STM32Flasher
                 }
             }
         }
+
+        private void sendGoAddressData(uint address)
+        {
+            byte[] data = new byte[5];
+            // address-> msb to lsb
+            data[0] = (byte)((address >> 24) & 0xFF);
+            data[1] = (byte)((address >> 16) & 0xFF);
+            data[2] = (byte)((address >> 8) & 0xFF);
+            data[3] = (byte)(address & 0xFF);
+
+            byte adddressCheckSum = (byte)(data[0] ^ data[1] ^ data[2] ^ data[3]);
+            data[4] = adddressCheckSum; //address checksum
+
+            byte cmd = (byte)BootloaderCommand.Go;
+            SendBootLoaderCommand(cmd, data);
+        }
+
+        private void btnGoToAddress_Click(object sender, EventArgs e)
+        {
+            if (txtGoToAddress.Text == "")
+            {
+                MessageBox.Show("Please enter the address", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                string addressText = txtGoToAddress.Text.Trim();
+
+                if (addressText.StartsWith("0x"))
+                {
+                    addressText = addressText.Substring(2);
+                }
+                uint address = Convert.ToUInt32(addressText, 16);
+
+                sendGoAddressData(address);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 }
