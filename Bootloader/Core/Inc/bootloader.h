@@ -30,9 +30,15 @@
 #define NACK							0x1F
 #define UNKNOWN							0x99
 
+#define SRAM1_END						0x2001BFFF
+#define SRAM2_END						0x2001FFFF
+#define BKPSRAM_END						0x40024FFF
+
 void processBootloaderCommand(void);
 void handleGetVersion(void);
 void handleGetHelp(void);
 void handleGetID(void);
+void handleReadMemory(void);
+uint8_t verifyAddress(uint32_t address);
 
 #endif /* INC_BOOTLOADER_H_ */

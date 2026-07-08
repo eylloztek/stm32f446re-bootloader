@@ -24,6 +24,9 @@ void processBootloaderCommand(void) {
 	case GET_ID:
 		handleGetID();
 		break;
+	case READ_MEMORY:
+		handleReadMemory();
+		break;
 	default:
 		break;
 	}
@@ -85,8 +88,8 @@ void handleGetHelp(void) {
 
 }
 
-void handleGetID(void){
-	uint8_t response[4] = {0};
+void handleGetID(void) {
+	uint8_t response[4] = { 0 };
 	uint32_t IDCode = DBGMCU->IDCODE;
 	uint8_t PIDLSB = IDCode & 0xFF;
 
@@ -104,5 +107,67 @@ void handleGetID(void){
 #endif
 
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+
+}
+
+void handleReadMemory(void) {
+	uint8_t response[1] = { 0 };
+
+	uint32_t address = (messageBuffer[3] << 24) | (messageBuffer[4] << 16)
+			| (messageBuffer[5] << 8) | (messageBuffer[6]);
+
+	uint8_t addressChecksum = messageBuffer[7];
+	uint8_t calculatedChecksum = (messageBuffer[3]) ^ (messageBuffer[4])
+			^ (messageBuffer[5]) ^ (messageBuffer[6]);
+
+	if (addressChecksum != calculatedChecksum) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	uint8_t N = messageBuffer[8];
+	uint8_t NComplement = messageBuffer[9];
+
+#ifdef DEBUG_PRINT
+	printf("N: 0x%02X\r\n", N);
+	printf("NComplement: 0x%02X\r\n", NComplement);
+	printf("XOR: 0x%02X\r\n", (uint8_t) (N ^ NComplement));
+#endif
+
+	if ((uint8_t) (N ^ NComplement) != 0xFF) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	uint8_t addressIsInvalid = verifyAddress(address);
+
+	if (!addressIsInvalid) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	response[0] = ACK;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+
+	uint8_t numberOfBytes = N + 1;
+	uint8_t buffer[256];
+	memcpy(buffer, (uint8_t*) address, numberOfBytes);
+	HAL_UART_Transmit(UART_PORT, buffer, numberOfBytes, HAL_MAX_DELAY);
+
+}
+
+uint8_t verifyAddress(uint32_t address) {
+
+	if ((address >= FLASH_BASE && address <= FLASH_END)
+			|| (address >= SRAM1_BASE && address <= SRAM1_END)
+			|| (address >= SRAM2_BASE && address <= SRAM2_END)
+			|| (address >= BKPSRAM_BASE && address <= BKPSRAM_END)) {
+
+		return 1;
+	}
+	return 0;
 
 }

@@ -171,8 +171,10 @@ namespace STM32Flasher
 
             byte addressCheckSum = (byte)(data[0] ^ data[1] ^ data[2] ^ data[3]);
             data[4] = addressCheckSum;
-            data[5] = length;
-            data[6] = (byte)-length; //length complement
+
+            byte n = (byte)(length - 1);
+            data[5] = n;
+            data[6] = (byte)(n ^ 0xFF);   // or: (byte)~n
 
             byte cmd = (byte)BootloaderCommand.ReadMemory;
             SendBootLoaderCommand(cmd, data);
