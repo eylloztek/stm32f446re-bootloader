@@ -40,7 +40,11 @@ void handleGetHelp(void);
 void handleGetID(void);
 void handleReadMemory(void);
 uint8_t verifyAddress(uint32_t address);
+HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
+		uint32_t dataLength);
 void handleGoToAddress(void);
 void handleWriteMemory(void);
+HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
+		uint32_t dataLength);
 
 #endif /* INC_BOOTLOADER_H_ */

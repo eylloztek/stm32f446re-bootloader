@@ -209,8 +209,100 @@ void handleGoToAddress(void) {
 
 }
 
-void handleWriteMemory(void){
-	uint8_t response[1] = {0};
+void handleWriteMemory(void) {
+	uint8_t response[1] = { 0 };
+	uint8_t offset = 3;
+	uint32_t address = (messageBuffer[offset] << 24)
+			| (messageBuffer[offset + 1] << 16)
+			| (messageBuffer[offset + 2] << 8) | (messageBuffer[offset + 3]);
+
+	uint8_t addressCheckSum = messageBuffer[offset + 4];
+	uint8_t calculatedCheckSum = (messageBuffer[offset])
+			^ (messageBuffer[offset + 1]) ^ (messageBuffer[offset + 2])
+			^ (messageBuffer[offset + 3]);
+
+	if (addressCheckSum != calculatedCheckSum) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	uint8_t addressIsValid = verifyAddress(address);
+	if (!addressIsValid) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		return;
+	}
+
+	uint32_t totalLength = (messageBuffer[offset + 5] << 24)
+			| (messageBuffer[offset + 6] << 16)
+			| (messageBuffer[offset + 7] << 8) | (messageBuffer[offset + 8]);
+
+	bufferIndex = 0;
+	memset(messageBuffer, 0, BUFFER_SIZE);
+	response[0] = ACK;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+
+	uint32_t offsetData = 0;
+
+	while (offsetData < totalLength) {
+		uint8_t N;
+
+		if (HAL_UART_Receive(UART_PORT, &N, 1, HAL_MAX_DELAY) != HAL_OK) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, 1, HAL_MAX_DELAY);
+			return;
+		}
+
+		uint32_t dataLength = N + 1;
+
+		uint8_t buffer[256 + 1]; // data + checksum
+		if (HAL_UART_Receive(UART_PORT, buffer, dataLength + 1, HAL_MAX_DELAY)
+				!= HAL_OK) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, 1, HAL_MAX_DELAY);
+			return;
+		}
+
+		uint8_t calculatedChecksum = N;
+		for (uint32_t i = 0; i < dataLength; i++) {
+			calculatedChecksum ^= buffer[i];
+		}
+
+		uint8_t receivedChecksum = buffer[dataLength];
+		if (receivedChecksum != calculatedChecksum) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, 1, HAL_MAX_DELAY);
+			return;
+		}
+
+		if (flashWrite(address, buffer, dataLength) == HAL_OK) {
+			address += dataLength;
+			offsetData += dataLength;
+			response[0] = ACK;
+			HAL_UART_Transmit(UART_PORT, response, 1, HAL_MAX_DELAY);
+		} else {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, 1, HAL_MAX_DELAY);
+			return;
+		}
+	}
+}
+
+HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
+		uint32_t dataLength) {
+
+	HAL_FLASH_Unlock();
+	for (uint32_t i = 0; i < dataLength; i++) {
+		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, address + i, data[i])
+				!= HAL_OK) {
+			HAL_FLASH_Lock();
+			return HAL_ERROR;
+		}
+	}
+	HAL_FLASH_Lock();
+
+	return HAL_OK;
 
 }
 

@@ -53,6 +53,7 @@ char message[] = "Going to Application...\r\n";
 uint8_t rxChar;
 char messageBuffer[BUFFER_SIZE];
 uint8_t bufferIndex;
+volatile uint8_t commandReady = 0;
 
 /* USER CODE END PV */
 
@@ -79,18 +80,16 @@ int _write(int file, char *ptr, int len) {
 
 void JumpToApplication(void) {
 	__set_MSP(APP_STACK_POINTER);
-	void (*AppResetHandler) (void);
+	void (*AppResetHandler)(void);
 
-	AppResetHandler = (void (*) (void)) APP_RESET_HANDLER;
+	AppResetHandler = (void (*)(void)) APP_RESET_HANDLER;
 	AppResetHandler();
-
-
 
 }
 
 void uartSend(char *message) {
 	HAL_UART_Transmit(UART_PORT, (uint8_t*) message, strlen(message),
-			HAL_MAX_DELAY);
+	HAL_MAX_DELAY);
 }
 
 /* USER CODE END 0 */
@@ -136,10 +135,17 @@ int main(void) {
 		/* USER CODE BEGIN 3 */
 		if (!HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin)) {
 			uartSend(message);
+
 #ifdef DEBUG_PRINT
 			printf("Going to Application...\r\n");
 #endif
 			JumpToApplication();
+		}
+		if (commandReady) {
+			commandReady = 0;
+			processBootloaderCommand();
+
+			HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
 		}
 	}
 	/* USER CODE END 3 */
@@ -257,17 +263,24 @@ static void MX_GPIO_Init(void) {
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if (huart->Instance == USART2) {
-		if (bufferIndex < BUFFER_SIZE -1) {
+		if (bufferIndex < BUFFER_SIZE - 1) {
 			messageBuffer[bufferIndex++] = rxChar;
 			messageBuffer[bufferIndex] = '\0';
+		} else {
+			bufferIndex = 0;
+			memset(messageBuffer, 0, BUFFER_SIZE);
 		}
-		if (messageBuffer[bufferIndex - 2] == '\r' && messageBuffer[bufferIndex-1] == '\n') {
-			processBootloaderCommand();
+
+		if (bufferIndex >= 2 && messageBuffer[bufferIndex - 2] == '\r'
+				&& messageBuffer[bufferIndex - 1] == '\n') {
+			commandReady = 1;
+			return;
 		}
+
+		HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
 	}
-	HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
 }
 /* USER CODE END 4 */
 
