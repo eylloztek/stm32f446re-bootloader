@@ -417,5 +417,58 @@ namespace STM32Flasher
                 MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        private void sendEraseData()
+        {
+            byte[] data = new byte[258];
+            int index = 0;
+
+            List<byte> selectedSectors = new List<byte>();
+            if (chBoxSelect0.Checked) selectedSectors.Add(0x00);
+            if (chBoxSelect1.Checked) selectedSectors.Add(0x01);
+            if (chBoxSelect2.Checked) selectedSectors.Add(0x02);
+            if (chBoxSelect3.Checked) selectedSectors.Add(0x03);
+            if (chBoxSelect4.Checked) selectedSectors.Add(0x04);
+            if (chBoxSelect5.Checked) selectedSectors.Add(0x05);
+            if (chBoxSelect6.Checked) selectedSectors.Add(0x06);
+            if (chBoxSelect7.Checked) selectedSectors.Add(0x07);
+
+            if (chBoxMassErase.Checked)
+            {
+                data[0] = 0xFF;
+                data[1] = (byte)(data[0] ^ 0x00);
+                index = 2;
+            }
+            else
+            {
+                if (selectedSectors.Count == 0)
+                {
+                    MessageBox.Show("Please select sector or sectors.");
+                }
+
+                byte N = (byte)(selectedSectors.Count - 1);
+                byte checkSum = N;
+                data[0] = N;
+                index = 1;
+                for (int i = 0; i < selectedSectors.Count; i++)
+                {
+                    data[index] = selectedSectors[i];
+                    checkSum ^= selectedSectors[i];
+                    index++;
+                }
+                data[index] = checkSum;
+                index++;
+            }
+
+            byte[] finalData = new byte[index];
+            Array.Copy(data, finalData, index);
+            byte cmd = (byte)BootloaderCommand.Erase;
+            SendBootLoaderCommand(cmd, finalData);
+        }
+
+        private void btnErase_Click(object sender, EventArgs e)
+        {
+            sendEraseData();
+        }
     }
 }

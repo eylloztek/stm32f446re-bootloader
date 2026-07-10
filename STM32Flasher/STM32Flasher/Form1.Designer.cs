@@ -44,6 +44,18 @@
             this.lblComPort = new System.Windows.Forms.Label();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
             this.grpBoxCommands = new System.Windows.Forms.GroupBox();
+            this.chBoxSelect3 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect2 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect1 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect0 = new System.Windows.Forms.CheckBox();
+            this.btnErase = new System.Windows.Forms.Button();
+            this.btnBrowse = new System.Windows.Forms.Button();
+            this.txtBrowseFile = new System.Windows.Forms.TextBox();
+            this.txtWriteMem = new System.Windows.Forms.TextBox();
+            this.btnWriteMem = new System.Windows.Forms.Button();
+            this.txtGoToAddress = new System.Windows.Forms.TextBox();
+            this.btnGoToAddress = new System.Windows.Forms.Button();
+            this.btnSave = new System.Windows.Forms.Button();
             this.txtLength = new System.Windows.Forms.TextBox();
             this.txtAddress = new System.Windows.Forms.TextBox();
             this.lblLength = new System.Windows.Forms.Label();
@@ -54,14 +66,12 @@
             this.txtReceiveMessage = new System.Windows.Forms.TextBox();
             this.btnGetVer = new System.Windows.Forms.Button();
             this.btnGetHelp = new System.Windows.Forms.Button();
-            this.btnSave = new System.Windows.Forms.Button();
-            this.btnGoToAddress = new System.Windows.Forms.Button();
-            this.txtGoToAddress = new System.Windows.Forms.TextBox();
-            this.btnWriteMem = new System.Windows.Forms.Button();
-            this.txtWriteMem = new System.Windows.Forms.TextBox();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
-            this.txtBrowseFile = new System.Windows.Forms.TextBox();
-            this.btnBrowse = new System.Windows.Forms.Button();
+            this.chBoxSelect4 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect5 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect6 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect7 = new System.Windows.Forms.CheckBox();
+            this.chBoxMassErase = new System.Windows.Forms.CheckBox();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
@@ -220,6 +230,16 @@
             // 
             // grpBoxCommands
             // 
+            this.grpBoxCommands.Controls.Add(this.chBoxMassErase);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect7);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect6);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect5);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect4);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect3);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect2);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect1);
+            this.grpBoxCommands.Controls.Add(this.chBoxSelect0);
+            this.grpBoxCommands.Controls.Add(this.btnErase);
             this.grpBoxCommands.Controls.Add(this.btnBrowse);
             this.grpBoxCommands.Controls.Add(this.txtBrowseFile);
             this.grpBoxCommands.Controls.Add(this.txtWriteMem);
@@ -243,6 +263,118 @@
             this.grpBoxCommands.TabIndex = 1;
             this.grpBoxCommands.TabStop = false;
             this.grpBoxCommands.Text = "Commands";
+            // 
+            // chBoxSelect3
+            // 
+            this.chBoxSelect3.AutoSize = true;
+            this.chBoxSelect3.Location = new System.Drawing.Point(519, 397);
+            this.chBoxSelect3.Name = "chBoxSelect3";
+            this.chBoxSelect3.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect3.TabIndex = 30;
+            this.chBoxSelect3.Text = "Sector 3";
+            this.chBoxSelect3.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect2
+            // 
+            this.chBoxSelect2.AutoSize = true;
+            this.chBoxSelect2.Location = new System.Drawing.Point(393, 397);
+            this.chBoxSelect2.Name = "chBoxSelect2";
+            this.chBoxSelect2.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect2.TabIndex = 29;
+            this.chBoxSelect2.Text = "Sector 2";
+            this.chBoxSelect2.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect1
+            // 
+            this.chBoxSelect1.AutoSize = true;
+            this.chBoxSelect1.Location = new System.Drawing.Point(283, 397);
+            this.chBoxSelect1.Name = "chBoxSelect1";
+            this.chBoxSelect1.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect1.TabIndex = 28;
+            this.chBoxSelect1.Tag = "";
+            this.chBoxSelect1.Text = "Sector 1";
+            this.chBoxSelect1.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect0
+            // 
+            this.chBoxSelect0.AutoSize = true;
+            this.chBoxSelect0.Location = new System.Drawing.Point(169, 397);
+            this.chBoxSelect0.Name = "chBoxSelect0";
+            this.chBoxSelect0.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect0.TabIndex = 27;
+            this.chBoxSelect0.Text = "Sector 0";
+            this.chBoxSelect0.UseVisualStyleBackColor = true;
+            // 
+            // btnErase
+            // 
+            this.btnErase.Location = new System.Drawing.Point(6, 385);
+            this.btnErase.Name = "btnErase";
+            this.btnErase.Size = new System.Drawing.Size(128, 37);
+            this.btnErase.TabIndex = 26;
+            this.btnErase.Text = "Erase";
+            this.btnErase.UseVisualStyleBackColor = true;
+            this.btnErase.Click += new System.EventHandler(this.btnErase_Click);
+            // 
+            // btnBrowse
+            // 
+            this.btnBrowse.Location = new System.Drawing.Point(576, 325);
+            this.btnBrowse.Name = "btnBrowse";
+            this.btnBrowse.Size = new System.Drawing.Size(128, 37);
+            this.btnBrowse.TabIndex = 25;
+            this.btnBrowse.Text = "Browse";
+            this.btnBrowse.UseVisualStyleBackColor = true;
+            this.btnBrowse.Click += new System.EventHandler(this.btnBrowse_Click);
+            // 
+            // txtBrowseFile
+            // 
+            this.txtBrowseFile.Location = new System.Drawing.Point(340, 330);
+            this.txtBrowseFile.Name = "txtBrowseFile";
+            this.txtBrowseFile.Size = new System.Drawing.Size(210, 26);
+            this.txtBrowseFile.TabIndex = 24;
+            // 
+            // txtWriteMem
+            // 
+            this.txtWriteMem.Location = new System.Drawing.Point(169, 330);
+            this.txtWriteMem.Name = "txtWriteMem";
+            this.txtWriteMem.Size = new System.Drawing.Size(120, 26);
+            this.txtWriteMem.TabIndex = 23;
+            // 
+            // btnWriteMem
+            // 
+            this.btnWriteMem.Location = new System.Drawing.Point(6, 325);
+            this.btnWriteMem.Name = "btnWriteMem";
+            this.btnWriteMem.Size = new System.Drawing.Size(128, 37);
+            this.btnWriteMem.TabIndex = 22;
+            this.btnWriteMem.Text = "Write Memory";
+            this.btnWriteMem.UseVisualStyleBackColor = true;
+            this.btnWriteMem.Click += new System.EventHandler(this.btnWriteMem_Click);
+            // 
+            // txtGoToAddress
+            // 
+            this.txtGoToAddress.Location = new System.Drawing.Point(169, 269);
+            this.txtGoToAddress.Name = "txtGoToAddress";
+            this.txtGoToAddress.Size = new System.Drawing.Size(120, 26);
+            this.txtGoToAddress.TabIndex = 21;
+            // 
+            // btnGoToAddress
+            // 
+            this.btnGoToAddress.Location = new System.Drawing.Point(6, 264);
+            this.btnGoToAddress.Name = "btnGoToAddress";
+            this.btnGoToAddress.Size = new System.Drawing.Size(128, 37);
+            this.btnGoToAddress.TabIndex = 20;
+            this.btnGoToAddress.Text = "Go To Address";
+            this.btnGoToAddress.UseVisualStyleBackColor = true;
+            this.btnGoToAddress.Click += new System.EventHandler(this.btnGoToAddress_Click);
+            // 
+            // btnSave
+            // 
+            this.btnSave.Location = new System.Drawing.Point(470, 204);
+            this.btnSave.Name = "btnSave";
+            this.btnSave.Size = new System.Drawing.Size(128, 37);
+            this.btnSave.TabIndex = 19;
+            this.btnSave.Text = "Save";
+            this.btnSave.UseVisualStyleBackColor = true;
+            this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
             // txtLength
             // 
@@ -334,70 +466,59 @@
             this.btnGetHelp.UseVisualStyleBackColor = true;
             this.btnGetHelp.Click += new System.EventHandler(this.btnGetHelp_Click);
             // 
-            // btnSave
-            // 
-            this.btnSave.Location = new System.Drawing.Point(470, 204);
-            this.btnSave.Name = "btnSave";
-            this.btnSave.Size = new System.Drawing.Size(128, 37);
-            this.btnSave.TabIndex = 19;
-            this.btnSave.Text = "Save";
-            this.btnSave.UseVisualStyleBackColor = true;
-            this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
-            // 
-            // btnGoToAddress
-            // 
-            this.btnGoToAddress.Location = new System.Drawing.Point(6, 264);
-            this.btnGoToAddress.Name = "btnGoToAddress";
-            this.btnGoToAddress.Size = new System.Drawing.Size(128, 37);
-            this.btnGoToAddress.TabIndex = 20;
-            this.btnGoToAddress.Text = "Go To Address";
-            this.btnGoToAddress.UseVisualStyleBackColor = true;
-            this.btnGoToAddress.Click += new System.EventHandler(this.btnGoToAddress_Click);
-            // 
-            // txtGoToAddress
-            // 
-            this.txtGoToAddress.Location = new System.Drawing.Point(169, 269);
-            this.txtGoToAddress.Name = "txtGoToAddress";
-            this.txtGoToAddress.Size = new System.Drawing.Size(120, 26);
-            this.txtGoToAddress.TabIndex = 21;
-            // 
-            // btnWriteMem
-            // 
-            this.btnWriteMem.Location = new System.Drawing.Point(6, 325);
-            this.btnWriteMem.Name = "btnWriteMem";
-            this.btnWriteMem.Size = new System.Drawing.Size(128, 37);
-            this.btnWriteMem.TabIndex = 22;
-            this.btnWriteMem.Text = "Write Memory";
-            this.btnWriteMem.UseVisualStyleBackColor = true;
-            this.btnWriteMem.Click += new System.EventHandler(this.btnWriteMem_Click);
-            // 
-            // txtWriteMem
-            // 
-            this.txtWriteMem.Location = new System.Drawing.Point(169, 330);
-            this.txtWriteMem.Name = "txtWriteMem";
-            this.txtWriteMem.Size = new System.Drawing.Size(120, 26);
-            this.txtWriteMem.TabIndex = 23;
-            // 
             // openFileDialog1
             // 
             this.openFileDialog1.FileName = "openFileDialog1";
             // 
-            // txtBrowseFile
+            // chBoxSelect4
             // 
-            this.txtBrowseFile.Location = new System.Drawing.Point(340, 330);
-            this.txtBrowseFile.Name = "txtBrowseFile";
-            this.txtBrowseFile.Size = new System.Drawing.Size(210, 26);
-            this.txtBrowseFile.TabIndex = 24;
+            this.chBoxSelect4.AutoSize = true;
+            this.chBoxSelect4.Location = new System.Drawing.Point(638, 397);
+            this.chBoxSelect4.Name = "chBoxSelect4";
+            this.chBoxSelect4.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect4.TabIndex = 31;
+            this.chBoxSelect4.Text = "Sector 4";
+            this.chBoxSelect4.UseVisualStyleBackColor = true;
             // 
-            // btnBrowse
+            // chBoxSelect5
             // 
-            this.btnBrowse.Location = new System.Drawing.Point(576, 325);
-            this.btnBrowse.Name = "btnBrowse";
-            this.btnBrowse.Size = new System.Drawing.Size(128, 37);
-            this.btnBrowse.TabIndex = 25;
-            this.btnBrowse.Text = "Browse";
-            this.btnBrowse.UseVisualStyleBackColor = true;
-            this.btnBrowse.Click += new System.EventHandler(this.btnBrowse_Click);
+            this.chBoxSelect5.AutoSize = true;
+            this.chBoxSelect5.Location = new System.Drawing.Point(169, 442);
+            this.chBoxSelect5.Name = "chBoxSelect5";
+            this.chBoxSelect5.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect5.TabIndex = 32;
+            this.chBoxSelect5.Text = "Sector 5";
+            this.chBoxSelect5.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect6
+            // 
+            this.chBoxSelect6.AutoSize = true;
+            this.chBoxSelect6.Location = new System.Drawing.Point(283, 442);
+            this.chBoxSelect6.Name = "chBoxSelect6";
+            this.chBoxSelect6.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect6.TabIndex = 33;
+            this.chBoxSelect6.Text = "Sector 6";
+            this.chBoxSelect6.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect7
+            // 
+            this.chBoxSelect7.AutoSize = true;
+            this.chBoxSelect7.Location = new System.Drawing.Point(393, 442);
+            this.chBoxSelect7.Name = "chBoxSelect7";
+            this.chBoxSelect7.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect7.TabIndex = 34;
+            this.chBoxSelect7.Text = "Sector 7";
+            this.chBoxSelect7.UseVisualStyleBackColor = true;
+            // 
+            // chBoxMassErase
+            // 
+            this.chBoxMassErase.AutoSize = true;
+            this.chBoxMassErase.Location = new System.Drawing.Point(519, 442);
+            this.chBoxMassErase.Name = "chBoxMassErase";
+            this.chBoxMassErase.Size = new System.Drawing.Size(119, 24);
+            this.chBoxMassErase.TabIndex = 35;
+            this.chBoxMassErase.Text = "Mass Erase";
+            this.chBoxMassErase.UseVisualStyleBackColor = true;
             // 
             // STM32Flasher
             // 
@@ -452,6 +573,16 @@
         private System.Windows.Forms.TextBox txtWriteMem;
         private System.Windows.Forms.Button btnWriteMem;
         private System.Windows.Forms.OpenFileDialog openFileDialog1;
+        private System.Windows.Forms.Button btnErase;
+        private System.Windows.Forms.CheckBox chBoxSelect0;
+        private System.Windows.Forms.CheckBox chBoxSelect3;
+        private System.Windows.Forms.CheckBox chBoxSelect2;
+        private System.Windows.Forms.CheckBox chBoxSelect1;
+        private System.Windows.Forms.CheckBox chBoxSelect4;
+        private System.Windows.Forms.CheckBox chBoxMassErase;
+        private System.Windows.Forms.CheckBox chBoxSelect7;
+        private System.Windows.Forms.CheckBox chBoxSelect6;
+        private System.Windows.Forms.CheckBox chBoxSelect5;
     }
 }
 

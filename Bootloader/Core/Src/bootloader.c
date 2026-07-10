@@ -33,6 +33,9 @@ void processBootloaderCommand(void) {
 	case WRITE_MEMORY:
 		handleWriteMemory();
 		break;
+	case ERASE:
+		handleErase();
+		break;
 	default:
 		break;
 	}
@@ -287,6 +290,13 @@ void handleWriteMemory(void) {
 			return;
 		}
 	}
+}
+
+void handleErase(void){
+	uint8_t response[1] = {0};
+	uint8_t offset = 3;
+	uint8_t N = messageBuffer[offset];
+	uint8_t receivedChecksum = N;
 }
 
 HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
