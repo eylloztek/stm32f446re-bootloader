@@ -36,6 +36,12 @@ void processBootloaderCommand(void) {
 	case ERASE:
 		handleErase();
 		break;
+	case WRITE_PROTECT_UNPROTECT:
+		handleWriteProtectUnprotect();
+		break;
+	case READOUT_PROTECT_UNPROTECT:
+		handleReadoutProtectUnprotect();
+		break;
 	default:
 		break;
 	}
@@ -374,6 +380,14 @@ void handleErase(void) {
 	response[0] = ACK;
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response),
 	HAL_MAX_DELAY);
+}
+
+void handleWriteProtectUnprotect(void) {
+
+}
+
+void handleReadoutProtectUnprotect(void){
+
 }
 
 HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,

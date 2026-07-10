@@ -47,5 +47,7 @@ HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
 void handleGoToAddress(void);
 void handleWriteMemory(void);
 void handleErase(void);
+void handleWriteProtectUnprotect(void);
+void handleReadoutProtectUnprotect(void);
 
 #endif /* INC_BOOTLOADER_H_ */

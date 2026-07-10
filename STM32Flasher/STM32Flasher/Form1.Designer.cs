@@ -44,6 +44,11 @@
             this.lblComPort = new System.Windows.Forms.Label();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
             this.grpBoxCommands = new System.Windows.Forms.GroupBox();
+            this.chBoxMassErase = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect7 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect6 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect5 = new System.Windows.Forms.CheckBox();
+            this.chBoxSelect4 = new System.Windows.Forms.CheckBox();
             this.chBoxSelect3 = new System.Windows.Forms.CheckBox();
             this.chBoxSelect2 = new System.Windows.Forms.CheckBox();
             this.chBoxSelect1 = new System.Windows.Forms.CheckBox();
@@ -67,11 +72,17 @@
             this.btnGetVer = new System.Windows.Forms.Button();
             this.btnGetHelp = new System.Windows.Forms.Button();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
-            this.chBoxSelect4 = new System.Windows.Forms.CheckBox();
-            this.chBoxSelect5 = new System.Windows.Forms.CheckBox();
-            this.chBoxSelect6 = new System.Windows.Forms.CheckBox();
-            this.chBoxSelect7 = new System.Windows.Forms.CheckBox();
-            this.chBoxMassErase = new System.Windows.Forms.CheckBox();
+            this.btnWriteProtect = new System.Windows.Forms.Button();
+            this.chBoxWRP7 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP6 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP5 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP4 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP3 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP2 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP1 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP0 = new System.Windows.Forms.CheckBox();
+            this.btnReadoutPro = new System.Windows.Forms.Button();
+            this.cBoxReadoutPro = new System.Windows.Forms.ComboBox();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
@@ -230,6 +241,17 @@
             // 
             // grpBoxCommands
             // 
+            this.grpBoxCommands.Controls.Add(this.cBoxReadoutPro);
+            this.grpBoxCommands.Controls.Add(this.btnReadoutPro);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP7);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP6);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP5);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP4);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP3);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP2);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP1);
+            this.grpBoxCommands.Controls.Add(this.chBoxWRP0);
+            this.grpBoxCommands.Controls.Add(this.btnWriteProtect);
             this.grpBoxCommands.Controls.Add(this.chBoxMassErase);
             this.grpBoxCommands.Controls.Add(this.chBoxSelect7);
             this.grpBoxCommands.Controls.Add(this.chBoxSelect6);
@@ -263,6 +285,56 @@
             this.grpBoxCommands.TabIndex = 1;
             this.grpBoxCommands.TabStop = false;
             this.grpBoxCommands.Text = "Commands";
+            // 
+            // chBoxMassErase
+            // 
+            this.chBoxMassErase.AutoSize = true;
+            this.chBoxMassErase.Location = new System.Drawing.Point(519, 442);
+            this.chBoxMassErase.Name = "chBoxMassErase";
+            this.chBoxMassErase.Size = new System.Drawing.Size(119, 24);
+            this.chBoxMassErase.TabIndex = 35;
+            this.chBoxMassErase.Text = "Mass Erase";
+            this.chBoxMassErase.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect7
+            // 
+            this.chBoxSelect7.AutoSize = true;
+            this.chBoxSelect7.Location = new System.Drawing.Point(393, 442);
+            this.chBoxSelect7.Name = "chBoxSelect7";
+            this.chBoxSelect7.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect7.TabIndex = 34;
+            this.chBoxSelect7.Text = "Sector 7";
+            this.chBoxSelect7.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect6
+            // 
+            this.chBoxSelect6.AutoSize = true;
+            this.chBoxSelect6.Location = new System.Drawing.Point(283, 442);
+            this.chBoxSelect6.Name = "chBoxSelect6";
+            this.chBoxSelect6.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect6.TabIndex = 33;
+            this.chBoxSelect6.Text = "Sector 6";
+            this.chBoxSelect6.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect5
+            // 
+            this.chBoxSelect5.AutoSize = true;
+            this.chBoxSelect5.Location = new System.Drawing.Point(169, 442);
+            this.chBoxSelect5.Name = "chBoxSelect5";
+            this.chBoxSelect5.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect5.TabIndex = 32;
+            this.chBoxSelect5.Text = "Sector 5";
+            this.chBoxSelect5.UseVisualStyleBackColor = true;
+            // 
+            // chBoxSelect4
+            // 
+            this.chBoxSelect4.AutoSize = true;
+            this.chBoxSelect4.Location = new System.Drawing.Point(638, 397);
+            this.chBoxSelect4.Name = "chBoxSelect4";
+            this.chBoxSelect4.Size = new System.Drawing.Size(95, 24);
+            this.chBoxSelect4.TabIndex = 31;
+            this.chBoxSelect4.Text = "Sector 4";
+            this.chBoxSelect4.UseVisualStyleBackColor = true;
             // 
             // chBoxSelect3
             // 
@@ -470,55 +542,117 @@
             // 
             this.openFileDialog1.FileName = "openFileDialog1";
             // 
-            // chBoxSelect4
+            // btnWriteProtect
             // 
-            this.chBoxSelect4.AutoSize = true;
-            this.chBoxSelect4.Location = new System.Drawing.Point(638, 397);
-            this.chBoxSelect4.Name = "chBoxSelect4";
-            this.chBoxSelect4.Size = new System.Drawing.Size(95, 24);
-            this.chBoxSelect4.TabIndex = 31;
-            this.chBoxSelect4.Text = "Sector 4";
-            this.chBoxSelect4.UseVisualStyleBackColor = true;
+            this.btnWriteProtect.Location = new System.Drawing.Point(6, 525);
+            this.btnWriteProtect.Name = "btnWriteProtect";
+            this.btnWriteProtect.Size = new System.Drawing.Size(143, 37);
+            this.btnWriteProtect.TabIndex = 36;
+            this.btnWriteProtect.Text = "Write Protection";
+            this.btnWriteProtect.UseVisualStyleBackColor = true;
             // 
-            // chBoxSelect5
+            // chBoxWRP7
             // 
-            this.chBoxSelect5.AutoSize = true;
-            this.chBoxSelect5.Location = new System.Drawing.Point(169, 442);
-            this.chBoxSelect5.Name = "chBoxSelect5";
-            this.chBoxSelect5.Size = new System.Drawing.Size(95, 24);
-            this.chBoxSelect5.TabIndex = 32;
-            this.chBoxSelect5.Text = "Sector 5";
-            this.chBoxSelect5.UseVisualStyleBackColor = true;
+            this.chBoxWRP7.AutoSize = true;
+            this.chBoxWRP7.Location = new System.Drawing.Point(519, 570);
+            this.chBoxWRP7.Name = "chBoxWRP7";
+            this.chBoxWRP7.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP7.TabIndex = 44;
+            this.chBoxWRP7.Text = "WRP7";
+            this.chBoxWRP7.UseVisualStyleBackColor = true;
             // 
-            // chBoxSelect6
+            // chBoxWRP6
             // 
-            this.chBoxSelect6.AutoSize = true;
-            this.chBoxSelect6.Location = new System.Drawing.Point(283, 442);
-            this.chBoxSelect6.Name = "chBoxSelect6";
-            this.chBoxSelect6.Size = new System.Drawing.Size(95, 24);
-            this.chBoxSelect6.TabIndex = 33;
-            this.chBoxSelect6.Text = "Sector 6";
-            this.chBoxSelect6.UseVisualStyleBackColor = true;
+            this.chBoxWRP6.AutoSize = true;
+            this.chBoxWRP6.Location = new System.Drawing.Point(393, 570);
+            this.chBoxWRP6.Name = "chBoxWRP6";
+            this.chBoxWRP6.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP6.TabIndex = 43;
+            this.chBoxWRP6.Text = "WRP6";
+            this.chBoxWRP6.UseVisualStyleBackColor = true;
             // 
-            // chBoxSelect7
+            // chBoxWRP5
             // 
-            this.chBoxSelect7.AutoSize = true;
-            this.chBoxSelect7.Location = new System.Drawing.Point(393, 442);
-            this.chBoxSelect7.Name = "chBoxSelect7";
-            this.chBoxSelect7.Size = new System.Drawing.Size(95, 24);
-            this.chBoxSelect7.TabIndex = 34;
-            this.chBoxSelect7.Text = "Sector 7";
-            this.chBoxSelect7.UseVisualStyleBackColor = true;
+            this.chBoxWRP5.AutoSize = true;
+            this.chBoxWRP5.Location = new System.Drawing.Point(283, 570);
+            this.chBoxWRP5.Name = "chBoxWRP5";
+            this.chBoxWRP5.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP5.TabIndex = 42;
+            this.chBoxWRP5.Text = "WRP5";
+            this.chBoxWRP5.UseVisualStyleBackColor = true;
             // 
-            // chBoxMassErase
+            // chBoxWRP4
             // 
-            this.chBoxMassErase.AutoSize = true;
-            this.chBoxMassErase.Location = new System.Drawing.Point(519, 442);
-            this.chBoxMassErase.Name = "chBoxMassErase";
-            this.chBoxMassErase.Size = new System.Drawing.Size(119, 24);
-            this.chBoxMassErase.TabIndex = 35;
-            this.chBoxMassErase.Text = "Mass Erase";
-            this.chBoxMassErase.UseVisualStyleBackColor = true;
+            this.chBoxWRP4.AutoSize = true;
+            this.chBoxWRP4.Location = new System.Drawing.Point(169, 570);
+            this.chBoxWRP4.Name = "chBoxWRP4";
+            this.chBoxWRP4.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP4.TabIndex = 41;
+            this.chBoxWRP4.Text = "WRP4";
+            this.chBoxWRP4.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP3
+            // 
+            this.chBoxWRP3.AutoSize = true;
+            this.chBoxWRP3.Location = new System.Drawing.Point(519, 525);
+            this.chBoxWRP3.Name = "chBoxWRP3";
+            this.chBoxWRP3.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP3.TabIndex = 40;
+            this.chBoxWRP3.Text = "WRP3";
+            this.chBoxWRP3.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP2
+            // 
+            this.chBoxWRP2.AutoSize = true;
+            this.chBoxWRP2.Location = new System.Drawing.Point(393, 525);
+            this.chBoxWRP2.Name = "chBoxWRP2";
+            this.chBoxWRP2.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP2.TabIndex = 39;
+            this.chBoxWRP2.Text = "WRP2";
+            this.chBoxWRP2.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP1
+            // 
+            this.chBoxWRP1.AutoSize = true;
+            this.chBoxWRP1.Location = new System.Drawing.Point(283, 525);
+            this.chBoxWRP1.Name = "chBoxWRP1";
+            this.chBoxWRP1.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP1.TabIndex = 38;
+            this.chBoxWRP1.Tag = "";
+            this.chBoxWRP1.Text = "WRP1";
+            this.chBoxWRP1.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP0
+            // 
+            this.chBoxWRP0.AutoSize = true;
+            this.chBoxWRP0.Location = new System.Drawing.Point(169, 525);
+            this.chBoxWRP0.Name = "chBoxWRP0";
+            this.chBoxWRP0.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP0.TabIndex = 37;
+            this.chBoxWRP0.Text = "WRP0";
+            this.chBoxWRP0.UseVisualStyleBackColor = true;
+            // 
+            // btnReadoutPro
+            // 
+            this.btnReadoutPro.Location = new System.Drawing.Point(6, 615);
+            this.btnReadoutPro.Name = "btnReadoutPro";
+            this.btnReadoutPro.Size = new System.Drawing.Size(143, 48);
+            this.btnReadoutPro.TabIndex = 45;
+            this.btnReadoutPro.Text = "Readout Protection";
+            this.btnReadoutPro.UseVisualStyleBackColor = true;
+            // 
+            // cBoxReadoutPro
+            // 
+            this.cBoxReadoutPro.FormattingEnabled = true;
+            this.cBoxReadoutPro.Items.AddRange(new object[] {
+            "Level 0 (No Protection)",
+            "Level 1 (Read Protection)",
+            "Level 2 (Chip Lock - Irreversible)"});
+            this.cBoxReadoutPro.Location = new System.Drawing.Point(169, 627);
+            this.cBoxReadoutPro.Name = "cBoxReadoutPro";
+            this.cBoxReadoutPro.Size = new System.Drawing.Size(273, 28);
+            this.cBoxReadoutPro.TabIndex = 46;
+            this.cBoxReadoutPro.Text = "Level 0 (No Protection)";
             // 
             // STM32Flasher
             // 
@@ -583,6 +717,17 @@
         private System.Windows.Forms.CheckBox chBoxSelect7;
         private System.Windows.Forms.CheckBox chBoxSelect6;
         private System.Windows.Forms.CheckBox chBoxSelect5;
+        private System.Windows.Forms.CheckBox chBoxWRP7;
+        private System.Windows.Forms.CheckBox chBoxWRP6;
+        private System.Windows.Forms.CheckBox chBoxWRP5;
+        private System.Windows.Forms.CheckBox chBoxWRP4;
+        private System.Windows.Forms.CheckBox chBoxWRP3;
+        private System.Windows.Forms.CheckBox chBoxWRP2;
+        private System.Windows.Forms.CheckBox chBoxWRP1;
+        private System.Windows.Forms.CheckBox chBoxWRP0;
+        private System.Windows.Forms.Button btnWriteProtect;
+        private System.Windows.Forms.ComboBox cBoxReadoutPro;
+        private System.Windows.Forms.Button btnReadoutPro;
     }
 }
 
