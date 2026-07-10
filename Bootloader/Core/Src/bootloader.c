@@ -292,11 +292,88 @@ void handleWriteMemory(void) {
 	}
 }
 
-void handleErase(void){
-	uint8_t response[1] = {0};
+void handleErase(void) {
+	uint8_t response[1] = { 0 };
 	uint8_t offset = 3;
 	uint8_t N = messageBuffer[offset];
-	uint8_t receivedChecksum = N;
+	uint8_t receivedCheckSum = N;
+	uint8_t calculatedCheckSum = N;
+
+	if (N == 0xFF) {
+		receivedCheckSum = messageBuffer[offset + 1];
+		calculatedCheckSum = 0xFF ^ 0x00;
+		if (receivedCheckSum != calculatedCheckSum) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+			HAL_MAX_DELAY);
+			return;
+		}
+		HAL_FLASH_Unlock();
+
+		FLASH_EraseInitTypeDef eraseInit;
+		uint32_t sectorError;
+
+		eraseInit.TypeErase = FLASH_TYPEERASE_MASSERASE;
+		eraseInit.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+		eraseInit.Sector = FLASH_SECTOR_0;
+		eraseInit.NbSectors = 8;
+
+		response[0] = ACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+		HAL_MAX_DELAY);
+		if (HAL_FLASHEx_Erase(&eraseInit, &sectorError) != HAL_OK) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+			HAL_MAX_DELAY);
+		}
+
+		HAL_FLASH_Lock();
+		return;
+	}
+
+	for (int i = 1; i <= N + 1; i++) {
+		calculatedCheckSum ^= messageBuffer[i + offset];
+	}
+	receivedCheckSum = messageBuffer[N + 2 + offset];
+
+	if (calculatedCheckSum != receivedCheckSum) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+		HAL_MAX_DELAY);
+		return;
+	}
+
+	HAL_FLASH_Unlock();
+
+	FLASH_EraseInitTypeDef eraseInit;
+	uint32_t sectorError;
+
+	eraseInit.TypeErase = FLASH_TYPEERASE_SECTORS;
+	eraseInit.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+	eraseInit.NbSectors = 1;
+
+	for (int i = 1; i <= N + 1; i++) {
+		uint8_t sectorNumber = messageBuffer[i + offset];
+
+		if (sectorNumber > F446NUMBEROFSECTOR)
+			continue;
+
+		eraseInit.Sector = sectorNumber;
+
+		if (HAL_FLASHEx_Erase(&eraseInit, &sectorError) != HAL_OK) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+			HAL_MAX_DELAY);
+			HAL_FLASH_Lock();
+			return;
+		}
+	}
+
+	HAL_FLASH_Lock();
+
+	response[0] = ACK;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+	HAL_MAX_DELAY);
 }
 
 HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,

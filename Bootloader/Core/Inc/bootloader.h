@@ -34,6 +34,8 @@
 #define SRAM2_END						0x2001FFFF
 #define BKPSRAM_END						0x40024FFF
 
+#define F446NUMBEROFSECTOR				7
+
 void processBootloaderCommand(void);
 void handleGetVersion(void);
 void handleGetHelp(void);
