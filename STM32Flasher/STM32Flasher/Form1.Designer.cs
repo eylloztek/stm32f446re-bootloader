@@ -44,6 +44,17 @@
             this.lblComPort = new System.Windows.Forms.Label();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
             this.grpBoxCommands = new System.Windows.Forms.GroupBox();
+            this.cBoxReadoutPro = new System.Windows.Forms.ComboBox();
+            this.btnReadoutPro = new System.Windows.Forms.Button();
+            this.chBoxWRP7 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP6 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP5 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP4 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP3 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP2 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP1 = new System.Windows.Forms.CheckBox();
+            this.chBoxWRP0 = new System.Windows.Forms.CheckBox();
+            this.btnWriteProtect = new System.Windows.Forms.Button();
             this.chBoxMassErase = new System.Windows.Forms.CheckBox();
             this.chBoxSelect7 = new System.Windows.Forms.CheckBox();
             this.chBoxSelect6 = new System.Windows.Forms.CheckBox();
@@ -72,17 +83,6 @@
             this.btnGetVer = new System.Windows.Forms.Button();
             this.btnGetHelp = new System.Windows.Forms.Button();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
-            this.btnWriteProtect = new System.Windows.Forms.Button();
-            this.chBoxWRP7 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP6 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP5 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP4 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP3 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP2 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP1 = new System.Windows.Forms.CheckBox();
-            this.chBoxWRP0 = new System.Windows.Forms.CheckBox();
-            this.btnReadoutPro = new System.Windows.Forms.Button();
-            this.cBoxReadoutPro = new System.Windows.Forms.ComboBox();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.SuspendLayout();
@@ -285,6 +285,119 @@
             this.grpBoxCommands.TabIndex = 1;
             this.grpBoxCommands.TabStop = false;
             this.grpBoxCommands.Text = "Commands";
+            // 
+            // cBoxReadoutPro
+            // 
+            this.cBoxReadoutPro.FormattingEnabled = true;
+            this.cBoxReadoutPro.Items.AddRange(new object[] {
+            "Level 0 (No Protection)",
+            "Level 1 (Read Protection)",
+            "Level 2 (Chip Lock - Irreversible)"});
+            this.cBoxReadoutPro.Location = new System.Drawing.Point(169, 627);
+            this.cBoxReadoutPro.Name = "cBoxReadoutPro";
+            this.cBoxReadoutPro.Size = new System.Drawing.Size(273, 28);
+            this.cBoxReadoutPro.TabIndex = 46;
+            this.cBoxReadoutPro.Text = "Level 0 (No Protection)";
+            // 
+            // btnReadoutPro
+            // 
+            this.btnReadoutPro.Location = new System.Drawing.Point(6, 615);
+            this.btnReadoutPro.Name = "btnReadoutPro";
+            this.btnReadoutPro.Size = new System.Drawing.Size(143, 48);
+            this.btnReadoutPro.TabIndex = 45;
+            this.btnReadoutPro.Text = "Readout Protection";
+            this.btnReadoutPro.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP7
+            // 
+            this.chBoxWRP7.AutoSize = true;
+            this.chBoxWRP7.Location = new System.Drawing.Point(519, 570);
+            this.chBoxWRP7.Name = "chBoxWRP7";
+            this.chBoxWRP7.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP7.TabIndex = 44;
+            this.chBoxWRP7.Text = "WRP7";
+            this.chBoxWRP7.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP6
+            // 
+            this.chBoxWRP6.AutoSize = true;
+            this.chBoxWRP6.Location = new System.Drawing.Point(393, 570);
+            this.chBoxWRP6.Name = "chBoxWRP6";
+            this.chBoxWRP6.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP6.TabIndex = 43;
+            this.chBoxWRP6.Text = "WRP6";
+            this.chBoxWRP6.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP5
+            // 
+            this.chBoxWRP5.AutoSize = true;
+            this.chBoxWRP5.Location = new System.Drawing.Point(283, 570);
+            this.chBoxWRP5.Name = "chBoxWRP5";
+            this.chBoxWRP5.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP5.TabIndex = 42;
+            this.chBoxWRP5.Text = "WRP5";
+            this.chBoxWRP5.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP4
+            // 
+            this.chBoxWRP4.AutoSize = true;
+            this.chBoxWRP4.Location = new System.Drawing.Point(169, 570);
+            this.chBoxWRP4.Name = "chBoxWRP4";
+            this.chBoxWRP4.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP4.TabIndex = 41;
+            this.chBoxWRP4.Text = "WRP4";
+            this.chBoxWRP4.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP3
+            // 
+            this.chBoxWRP3.AutoSize = true;
+            this.chBoxWRP3.Location = new System.Drawing.Point(519, 525);
+            this.chBoxWRP3.Name = "chBoxWRP3";
+            this.chBoxWRP3.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP3.TabIndex = 40;
+            this.chBoxWRP3.Text = "WRP3";
+            this.chBoxWRP3.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP2
+            // 
+            this.chBoxWRP2.AutoSize = true;
+            this.chBoxWRP2.Location = new System.Drawing.Point(393, 525);
+            this.chBoxWRP2.Name = "chBoxWRP2";
+            this.chBoxWRP2.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP2.TabIndex = 39;
+            this.chBoxWRP2.Text = "WRP2";
+            this.chBoxWRP2.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP1
+            // 
+            this.chBoxWRP1.AutoSize = true;
+            this.chBoxWRP1.Location = new System.Drawing.Point(283, 525);
+            this.chBoxWRP1.Name = "chBoxWRP1";
+            this.chBoxWRP1.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP1.TabIndex = 38;
+            this.chBoxWRP1.Tag = "";
+            this.chBoxWRP1.Text = "WRP1";
+            this.chBoxWRP1.UseVisualStyleBackColor = true;
+            // 
+            // chBoxWRP0
+            // 
+            this.chBoxWRP0.AutoSize = true;
+            this.chBoxWRP0.Location = new System.Drawing.Point(169, 525);
+            this.chBoxWRP0.Name = "chBoxWRP0";
+            this.chBoxWRP0.Size = new System.Drawing.Size(81, 24);
+            this.chBoxWRP0.TabIndex = 37;
+            this.chBoxWRP0.Text = "WRP0";
+            this.chBoxWRP0.UseVisualStyleBackColor = true;
+            // 
+            // btnWriteProtect
+            // 
+            this.btnWriteProtect.Location = new System.Drawing.Point(6, 525);
+            this.btnWriteProtect.Name = "btnWriteProtect";
+            this.btnWriteProtect.Size = new System.Drawing.Size(143, 37);
+            this.btnWriteProtect.TabIndex = 36;
+            this.btnWriteProtect.Text = "Write Protection";
+            this.btnWriteProtect.UseVisualStyleBackColor = true;
+            this.btnWriteProtect.Click += new System.EventHandler(this.btnWriteProtect_Click);
             // 
             // chBoxMassErase
             // 
@@ -541,118 +654,6 @@
             // openFileDialog1
             // 
             this.openFileDialog1.FileName = "openFileDialog1";
-            // 
-            // btnWriteProtect
-            // 
-            this.btnWriteProtect.Location = new System.Drawing.Point(6, 525);
-            this.btnWriteProtect.Name = "btnWriteProtect";
-            this.btnWriteProtect.Size = new System.Drawing.Size(143, 37);
-            this.btnWriteProtect.TabIndex = 36;
-            this.btnWriteProtect.Text = "Write Protection";
-            this.btnWriteProtect.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP7
-            // 
-            this.chBoxWRP7.AutoSize = true;
-            this.chBoxWRP7.Location = new System.Drawing.Point(519, 570);
-            this.chBoxWRP7.Name = "chBoxWRP7";
-            this.chBoxWRP7.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP7.TabIndex = 44;
-            this.chBoxWRP7.Text = "WRP7";
-            this.chBoxWRP7.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP6
-            // 
-            this.chBoxWRP6.AutoSize = true;
-            this.chBoxWRP6.Location = new System.Drawing.Point(393, 570);
-            this.chBoxWRP6.Name = "chBoxWRP6";
-            this.chBoxWRP6.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP6.TabIndex = 43;
-            this.chBoxWRP6.Text = "WRP6";
-            this.chBoxWRP6.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP5
-            // 
-            this.chBoxWRP5.AutoSize = true;
-            this.chBoxWRP5.Location = new System.Drawing.Point(283, 570);
-            this.chBoxWRP5.Name = "chBoxWRP5";
-            this.chBoxWRP5.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP5.TabIndex = 42;
-            this.chBoxWRP5.Text = "WRP5";
-            this.chBoxWRP5.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP4
-            // 
-            this.chBoxWRP4.AutoSize = true;
-            this.chBoxWRP4.Location = new System.Drawing.Point(169, 570);
-            this.chBoxWRP4.Name = "chBoxWRP4";
-            this.chBoxWRP4.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP4.TabIndex = 41;
-            this.chBoxWRP4.Text = "WRP4";
-            this.chBoxWRP4.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP3
-            // 
-            this.chBoxWRP3.AutoSize = true;
-            this.chBoxWRP3.Location = new System.Drawing.Point(519, 525);
-            this.chBoxWRP3.Name = "chBoxWRP3";
-            this.chBoxWRP3.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP3.TabIndex = 40;
-            this.chBoxWRP3.Text = "WRP3";
-            this.chBoxWRP3.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP2
-            // 
-            this.chBoxWRP2.AutoSize = true;
-            this.chBoxWRP2.Location = new System.Drawing.Point(393, 525);
-            this.chBoxWRP2.Name = "chBoxWRP2";
-            this.chBoxWRP2.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP2.TabIndex = 39;
-            this.chBoxWRP2.Text = "WRP2";
-            this.chBoxWRP2.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP1
-            // 
-            this.chBoxWRP1.AutoSize = true;
-            this.chBoxWRP1.Location = new System.Drawing.Point(283, 525);
-            this.chBoxWRP1.Name = "chBoxWRP1";
-            this.chBoxWRP1.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP1.TabIndex = 38;
-            this.chBoxWRP1.Tag = "";
-            this.chBoxWRP1.Text = "WRP1";
-            this.chBoxWRP1.UseVisualStyleBackColor = true;
-            // 
-            // chBoxWRP0
-            // 
-            this.chBoxWRP0.AutoSize = true;
-            this.chBoxWRP0.Location = new System.Drawing.Point(169, 525);
-            this.chBoxWRP0.Name = "chBoxWRP0";
-            this.chBoxWRP0.Size = new System.Drawing.Size(81, 24);
-            this.chBoxWRP0.TabIndex = 37;
-            this.chBoxWRP0.Text = "WRP0";
-            this.chBoxWRP0.UseVisualStyleBackColor = true;
-            // 
-            // btnReadoutPro
-            // 
-            this.btnReadoutPro.Location = new System.Drawing.Point(6, 615);
-            this.btnReadoutPro.Name = "btnReadoutPro";
-            this.btnReadoutPro.Size = new System.Drawing.Size(143, 48);
-            this.btnReadoutPro.TabIndex = 45;
-            this.btnReadoutPro.Text = "Readout Protection";
-            this.btnReadoutPro.UseVisualStyleBackColor = true;
-            // 
-            // cBoxReadoutPro
-            // 
-            this.cBoxReadoutPro.FormattingEnabled = true;
-            this.cBoxReadoutPro.Items.AddRange(new object[] {
-            "Level 0 (No Protection)",
-            "Level 1 (Read Protection)",
-            "Level 2 (Chip Lock - Irreversible)"});
-            this.cBoxReadoutPro.Location = new System.Drawing.Point(169, 627);
-            this.cBoxReadoutPro.Name = "cBoxReadoutPro";
-            this.cBoxReadoutPro.Size = new System.Drawing.Size(273, 28);
-            this.cBoxReadoutPro.TabIndex = 46;
-            this.cBoxReadoutPro.Text = "Level 0 (No Protection)";
             // 
             // STM32Flasher
             // 

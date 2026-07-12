@@ -470,5 +470,46 @@ namespace STM32Flasher
         {
             sendEraseData();
         }
+
+        private void sendWriteProtectUnprotect()
+        {
+            List<byte> sectorsToProtect = new List<byte>();
+
+            if (chBoxWRP0.Checked) sectorsToProtect.Add(0x00);
+            if (chBoxWRP1.Checked) sectorsToProtect.Add(0x01);
+            if (chBoxWRP2.Checked) sectorsToProtect.Add(0x02);
+            if (chBoxWRP3.Checked) sectorsToProtect.Add(0x03);
+            if (chBoxWRP4.Checked) sectorsToProtect.Add(0x04);
+            if (chBoxWRP5.Checked) sectorsToProtect.Add(0x05);
+            if (chBoxWRP6.Checked) sectorsToProtect.Add(0x06);
+            if (chBoxWRP7.Checked) sectorsToProtect.Add(0x07);
+
+            if (sectorsToProtect.Count > 0)
+            {
+                byte N = (byte)(sectorsToProtect.Count - 1);
+                List<byte> payload = new List<byte> { N };
+                payload.AddRange(sectorsToProtect);
+
+                byte cmd = (byte)BootloaderCommand.WriteProtect;
+                SendBootLoaderCommand(cmd, payload.ToArray());
+
+                MessageBox.Show("Checked sectors have been write-protected.");
+            }
+            else
+            {
+                byte N = (byte)(sectorsToProtect.Count - 1);
+                List<byte> payload = new List<byte> { N };
+                payload.AddRange(sectorsToProtect);
+
+                byte cmd = (byte)BootloaderCommand.WriteProtect;
+                SendBootLoaderCommand(cmd, payload.ToArray());
+                MessageBox.Show("All sectors have been set to unprotected.");
+            }
+        }
+
+        private void btnWriteProtect_Click(object sender, EventArgs e)
+        {
+            sendWriteProtectUnprotect();
+        }
     }
 }

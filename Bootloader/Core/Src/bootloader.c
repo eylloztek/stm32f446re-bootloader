@@ -383,10 +383,50 @@ void handleErase(void) {
 }
 
 void handleWriteProtectUnprotect(void) {
+	uint8_t response[1] = { 0 };
+	uint8_t offset = 3;
+	uint8_t numSectors = messageBuffer[offset] + 1;
+	uint8_t *sectorCodes = &messageBuffer[offset + 1];
 
+	HAL_FLASH_OB_Unlock();
+
+	FLASH_OBProgramInitTypeDef obInit;
+	HAL_FLASHEx_OBGetConfig(&obInit);
+
+	obInit.OptionType = OPTIONBYTE_WRP;
+	obInit.WRPSector = 0xFF; //all sector unprotect
+	obInit.WRPState = OB_WRPSTATE_DISABLE;
+	HAL_FLASHEx_OBProgram(&obInit);
+
+	uint8_t wrpMask = 0;
+
+	for (uint8_t i = 0; i < numSectors; i++) {
+		uint8_t sector = sectorCodes[i];
+		if (sector < 8) {
+			wrpMask |= (1 << sector);
+		}
+	}
+
+	if (wrpMask > 0) {
+		obInit.OptionType = OPTIONBYTE_WRP;
+		obInit.WRPSector = wrpMask;
+		obInit.WRPState = OB_WRPSTATE_ENABLE;
+
+		if (HAL_FLASHEx_OBProgram(&obInit) != HAL_OK) {
+			response[0] = NACK;
+			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+			HAL_MAX_DELAY);
+			HAL_FLASH_OB_Lock();
+		}
+	}
+
+	response[0] = ACK;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+	HAL_MAX_DELAY);
+	HAL_FLASH_OB_Launch();
 }
 
-void handleReadoutProtectUnprotect(void){
+void handleReadoutProtectUnprotect(void) {
 
 }
 
