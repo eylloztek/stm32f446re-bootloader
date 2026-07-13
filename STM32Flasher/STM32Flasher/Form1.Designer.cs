@@ -660,10 +660,12 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1430, 824);
+            this.BackColor = System.Drawing.SystemColors.GradientInactiveCaption;
+            this.ClientSize = new System.Drawing.Size(1430, 719);
             this.Controls.Add(this.grpBoxCommands);
             this.Controls.Add(this.grpBoxConnection);
             this.Name = "STM32Flasher";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "STM32Flasher";
             this.Load += new System.EventHandler(this.STM32Flasher_Load);
             this.grpBoxConnection.ResumeLayout(false);

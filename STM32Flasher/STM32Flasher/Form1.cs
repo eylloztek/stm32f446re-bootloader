@@ -18,6 +18,9 @@ namespace STM32Flasher
         public STM32Flasher()
         {
             InitializeComponent();
+            this.FormBorderStyle = FormBorderStyle.FixedSingle;
+            this.MaximizeBox = false;
+            this.MinimizeBox = true;
         }
 
         public enum BootloaderCommand : byte
