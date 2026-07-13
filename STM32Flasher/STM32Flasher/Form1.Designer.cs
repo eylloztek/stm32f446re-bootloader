@@ -293,7 +293,7 @@
             "Level 0 (No Protection)",
             "Level 1 (Read Protection)",
             "Level 2 (Chip Lock - Irreversible)"});
-            this.cBoxReadoutPro.Location = new System.Drawing.Point(169, 627);
+            this.cBoxReadoutPro.Location = new System.Drawing.Point(169, 629);
             this.cBoxReadoutPro.Name = "cBoxReadoutPro";
             this.cBoxReadoutPro.Size = new System.Drawing.Size(273, 28);
             this.cBoxReadoutPro.TabIndex = 46;
@@ -303,10 +303,11 @@
             // 
             this.btnReadoutPro.Location = new System.Drawing.Point(6, 615);
             this.btnReadoutPro.Name = "btnReadoutPro";
-            this.btnReadoutPro.Size = new System.Drawing.Size(143, 48);
+            this.btnReadoutPro.Size = new System.Drawing.Size(143, 54);
             this.btnReadoutPro.TabIndex = 45;
             this.btnReadoutPro.Text = "Readout Protection";
             this.btnReadoutPro.UseVisualStyleBackColor = true;
+            this.btnReadoutPro.Click += new System.EventHandler(this.btnReadoutPro_Click);
             // 
             // chBoxWRP7
             // 

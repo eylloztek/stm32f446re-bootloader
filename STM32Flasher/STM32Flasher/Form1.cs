@@ -511,5 +511,37 @@ namespace STM32Flasher
         {
             sendWriteProtectUnprotect();
         }
+
+        private void sendReadOutProtectionData()
+        {
+            byte rdpLevel = 0xAA;
+
+            switch (cBoxReadoutPro.SelectedIndex)
+            {
+                case 0:
+                    rdpLevel = 0xAA;
+                    break;
+                case 1:
+                    rdpLevel = 0xBB;
+                    break;
+                case 2:
+                    rdpLevel = 0xCC;
+                    break;
+                default:
+                    MessageBox.Show("Invalid Selection");
+                    return;
+            }
+
+            byte[] payload = new byte[] { rdpLevel };
+            byte cmd = (byte)BootloaderCommand.ReadoutProtect;
+            SendBootLoaderCommand(cmd, payload);
+
+            MessageBox.Show($"Selected RDP Level:{cBoxReadoutPro.SelectedItem}");
+        }
+
+        private void btnReadoutPro_Click(object sender, EventArgs e)
+        {
+            sendReadOutProtectionData();
+        }
     }
 }

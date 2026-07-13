@@ -427,6 +427,44 @@ void handleWriteProtectUnprotect(void) {
 }
 
 void handleReadoutProtectUnprotect(void) {
+	uint8_t response[1] = { 0 };
+	uint8_t offset = 3;
+	uint8_t rdpLevel = 0xAA;
+	rdpLevel = messageBuffer[offset];
+
+	//for protection
+	if( rdpLevel == 0xCC){
+		rdpLevel = 0xAA;
+	}
+
+	HAL_FLASH_OB_Unlock();
+	FLASH_OBProgramInitTypeDef obInit;
+	HAL_FLASHEx_OBGetConfig(&obInit);
+
+	if (rdpLevel == 0xAA) {
+		obInit.RDPLevel = OB_RDP_LEVEL0;
+	} else if (rdpLevel == 0xBB) {
+		obInit.RDPLevel = OB_RDP_LEVEL1;
+	} else if (rdpLevel == 0xCC) {
+		obInit.RDPLevel = OB_RDP_LEVEL2;
+	} else {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+		HAL_MAX_DELAY);
+		return;
+	}
+
+	if (HAL_FLASHEx_OBProgram(&obInit) != HAL_OK) {
+		response[0] = NACK;
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+		HAL_MAX_DELAY);
+		HAL_FLASH_OB_Lock();
+	}
+
+	response[0] = ACK;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+	HAL_MAX_DELAY);
+	HAL_FLASH_OB_Launch();
 
 }
 
