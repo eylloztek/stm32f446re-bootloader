@@ -47,6 +47,7 @@ void processBootloaderCommand(void) {
 		handleResetOperation();
 		break;
 	default:
+		handleUnknownCommand();
 		break;
 	}
 
@@ -57,12 +58,19 @@ void processBootloaderCommand(void) {
 void handleGetVersion(void) {
 	uint8_t response[2] = { 0 };
 
-	if (BOOTLOADER_VERSION > 0 && BOOTLOADER_VERSION <= 255) {
-		response[0] = ACK;
-		response[1] = BOOTLOADER_VERSION;
-	} else {
+	uint8_t crc = calculateCRC(messageBuffer, 1, messageBuffer[1] + 1);
+
+	if (crc != messageBuffer[3]) {
 		response[0] = NACK;
-		response[1] = UNKNOWN;
+	} else {
+		if (BOOTLOADER_VERSION > 0 && BOOTLOADER_VERSION <= 255) {
+			response[0] = ACK;
+			response[1] = BOOTLOADER_VERSION;
+		} else {
+			response[0] = NACK;
+			response[1] = UNKNOWN;
+		}
+
 	}
 
 #ifdef DEBUG_PRINT
@@ -505,4 +513,20 @@ uint8_t verifyAddress(uint32_t address) {
 void handleResetOperation(void) {
 	counterTest++;
 	HAL_NVIC_SystemReset();
+}
+
+uint8_t calculateCRC(char *data, uint16_t startIndex, uint16_t length) {
+	uint8_t crc = 0x00;
+
+	for (uint16_t i = 0; i < length; i++) {
+		crc ^= (uint8_t) data[startIndex + i];
+	}
+	return crc;
+}
+
+void handleUnknownCommand(void) {
+	uint8_t response[1] = { 0 };
+
+	response[0] = UNKNOWN;
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
 }

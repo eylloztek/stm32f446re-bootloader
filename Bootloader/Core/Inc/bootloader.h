@@ -51,5 +51,7 @@ void handleErase(void);
 void handleWriteProtectUnprotect(void);
 void handleReadoutProtectUnprotect(void);
 void handleResetOperation(void);
+void handleUnknownCommand(void);
+uint8_t calculateCRC(char *data, uint16_t startIndex, uint16_t length);
 
 #endif /* INC_BOOTLOADER_H_ */
