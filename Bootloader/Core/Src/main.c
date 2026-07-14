@@ -53,6 +53,7 @@ char message[] = "Going to Application...\r\n";
 uint8_t rxChar;
 char messageBuffer[BUFFER_SIZE];
 uint8_t bufferIndex;
+uint8_t counterTest = 0;
 volatile uint8_t commandReady = 0;
 
 /* USER CODE END PV */

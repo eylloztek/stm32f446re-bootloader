@@ -25,6 +25,7 @@
 #define WRITE_PROTECT_UNPROTECT			0x63
 #define READOUT_PROTECT_UNPROTECT		0x82
 #define GET_CHECKSUM					0xA1
+#define RESET							0x89
 
 #define ACK								0x79
 #define NACK							0x1F
@@ -49,5 +50,6 @@ void handleWriteMemory(void);
 void handleErase(void);
 void handleWriteProtectUnprotect(void);
 void handleReadoutProtectUnprotect(void);
+void handleResetOperation(void);
 
 #endif /* INC_BOOTLOADER_H_ */

@@ -10,6 +10,7 @@
 
 extern char messageBuffer[BUFFER_SIZE];
 extern uint8_t bufferIndex;
+extern uint8_t counterTest;
 
 void processBootloaderCommand(void) {
 	uint8_t command = messageBuffer[2];
@@ -41,6 +42,9 @@ void processBootloaderCommand(void) {
 		break;
 	case READOUT_PROTECT_UNPROTECT:
 		handleReadoutProtectUnprotect();
+		break;
+	case RESET:
+		handleResetOperation();
 		break;
 	default:
 		break;
@@ -386,7 +390,7 @@ void handleWriteProtectUnprotect(void) {
 	uint8_t response[1] = { 0 };
 	uint8_t offset = 3;
 	uint8_t numSectors = messageBuffer[offset] + 1;
-	uint8_t *sectorCodes = &messageBuffer[offset + 1];
+	uint8_t *sectorCodes = (uint8_t*) &messageBuffer[offset + 1];
 
 	HAL_FLASH_OB_Unlock();
 
@@ -433,7 +437,7 @@ void handleReadoutProtectUnprotect(void) {
 	rdpLevel = messageBuffer[offset];
 
 	//for protection
-	if( rdpLevel == 0xCC){
+	if (rdpLevel == 0xCC) {
 		rdpLevel = 0xAA;
 	}
 
@@ -496,4 +500,9 @@ uint8_t verifyAddress(uint32_t address) {
 	}
 	return 0;
 
+}
+
+void handleResetOperation(void) {
+	counterTest++;
+	HAL_NVIC_SystemReset();
 }
