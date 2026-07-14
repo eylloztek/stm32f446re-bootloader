@@ -21,6 +21,8 @@ namespace STM32Flasher
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.MinimizeBox = true;
+            grpBoxCommands.Enabled = false;
+            grpBoxMode.Enabled = false;
         }
 
         public enum BootloaderCommand : byte
@@ -54,6 +56,8 @@ namespace STM32Flasher
             serialPort1.DataBits = 8;
             serialPort1.Parity = (Parity)Enum.Parse(typeof(Parity), cBoxParity.Text);
             serialPort1.StopBits = (StopBits)Enum.Parse(typeof(StopBits), cBoxStopBits.Text);
+            grpBoxCommands.Enabled = true;
+            grpBoxMode.Enabled = true;
 
             try
             {
@@ -76,6 +80,8 @@ namespace STM32Flasher
 
         private void btnDisconnect_Click(object sender, EventArgs e)
         {
+            grpBoxCommands.Enabled=false;
+            grpBoxMode.Enabled=false;
             if (serialPort1.IsOpen)
             {
                 serialPort1.Close();
@@ -545,6 +551,25 @@ namespace STM32Flasher
         private void btnReadoutPro_Click(object sender, EventArgs e)
         {
             sendReadOutProtectionData();
+        }
+
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            byte cmd = (byte)BootloaderCommand.Reset;
+            SendBootLoaderCommand(cmd, new byte[0]);
+        }
+
+        private void btnExitBoot_Click(object sender, EventArgs e)
+        {
+            uint defaultAddress = 0x08008000;
+            sendGoAddressData(defaultAddress);
+        }
+
+        private void btnRefresh_Click(object sender, EventArgs e)
+        {
+            cBoxComPort.Items.Clear();
+            String[] ports = SerialPort.GetPortNames();
+            cBoxComPort.Items.AddRange(ports);
         }
     }
 }

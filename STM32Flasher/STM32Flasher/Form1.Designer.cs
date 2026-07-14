@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(STM32Flasher));
             this.grpBoxConnection = new System.Windows.Forms.GroupBox();
             this.prgBarStatus = new System.Windows.Forms.ProgressBar();
             this.lblConnectionStatus = new System.Windows.Forms.Label();
@@ -83,12 +84,18 @@
             this.btnGetVer = new System.Windows.Forms.Button();
             this.btnGetHelp = new System.Windows.Forms.Button();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
+            this.grpBoxMode = new System.Windows.Forms.GroupBox();
+            this.btnReset = new System.Windows.Forms.Button();
+            this.btnExitBoot = new System.Windows.Forms.Button();
+            this.btnRefresh = new System.Windows.Forms.Button();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
+            this.grpBoxMode.SuspendLayout();
             this.SuspendLayout();
             // 
             // grpBoxConnection
             // 
+            this.grpBoxConnection.Controls.Add(this.btnRefresh);
             this.grpBoxConnection.Controls.Add(this.prgBarStatus);
             this.grpBoxConnection.Controls.Add(this.lblConnectionStatus);
             this.grpBoxConnection.Controls.Add(this.btnDisconnect);
@@ -224,7 +231,7 @@
             this.cBoxComPort.Name = "cBoxComPort";
             this.cBoxComPort.Size = new System.Drawing.Size(142, 28);
             this.cBoxComPort.TabIndex = 1;
-            this.cBoxComPort.Text = "COM5";
+            this.cBoxComPort.Text = "COM1";
             // 
             // lblComPort
             // 
@@ -281,7 +288,7 @@
             this.grpBoxCommands.Controls.Add(this.btnGetHelp);
             this.grpBoxCommands.Location = new System.Drawing.Point(402, 13);
             this.grpBoxCommands.Name = "grpBoxCommands";
-            this.grpBoxCommands.Size = new System.Drawing.Size(1016, 799);
+            this.grpBoxCommands.Size = new System.Drawing.Size(1016, 694);
             this.grpBoxCommands.TabIndex = 1;
             this.grpBoxCommands.TabStop = false;
             this.grpBoxCommands.Text = "Commands";
@@ -656,14 +663,58 @@
             // 
             this.openFileDialog1.FileName = "openFileDialog1";
             // 
+            // grpBoxMode
+            // 
+            this.grpBoxMode.Controls.Add(this.btnExitBoot);
+            this.grpBoxMode.Controls.Add(this.btnReset);
+            this.grpBoxMode.Location = new System.Drawing.Point(13, 347);
+            this.grpBoxMode.Name = "grpBoxMode";
+            this.grpBoxMode.Size = new System.Drawing.Size(383, 360);
+            this.grpBoxMode.TabIndex = 2;
+            this.grpBoxMode.TabStop = false;
+            this.grpBoxMode.Text = "Mode";
+            // 
+            // btnReset
+            // 
+            this.btnReset.Location = new System.Drawing.Point(103, 101);
+            this.btnReset.Name = "btnReset";
+            this.btnReset.Size = new System.Drawing.Size(128, 37);
+            this.btnReset.TabIndex = 15;
+            this.btnReset.Text = "Reset";
+            this.btnReset.UseVisualStyleBackColor = true;
+            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
+            // 
+            // btnExitBoot
+            // 
+            this.btnExitBoot.Location = new System.Drawing.Point(103, 178);
+            this.btnExitBoot.Name = "btnExitBoot";
+            this.btnExitBoot.Size = new System.Drawing.Size(128, 37);
+            this.btnExitBoot.TabIndex = 16;
+            this.btnExitBoot.Text = "Exit Boot";
+            this.btnExitBoot.UseVisualStyleBackColor = true;
+            this.btnExitBoot.Click += new System.EventHandler(this.btnExitBoot_Click);
+            // 
+            // btnRefresh
+            // 
+            this.btnRefresh.BackgroundImage = global::STM32Flasher.Properties.Resources.refresh;
+            this.btnRefresh.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.btnRefresh.Location = new System.Drawing.Point(270, 26);
+            this.btnRefresh.Name = "btnRefresh";
+            this.btnRefresh.Size = new System.Drawing.Size(32, 31);
+            this.btnRefresh.TabIndex = 12;
+            this.btnRefresh.UseVisualStyleBackColor = true;
+            this.btnRefresh.Click += new System.EventHandler(this.btnRefresh_Click);
+            // 
             // STM32Flasher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.GradientInactiveCaption;
             this.ClientSize = new System.Drawing.Size(1430, 719);
+            this.Controls.Add(this.grpBoxMode);
             this.Controls.Add(this.grpBoxCommands);
             this.Controls.Add(this.grpBoxConnection);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "STM32Flasher";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "STM32Flasher";
@@ -672,6 +723,7 @@
             this.grpBoxConnection.PerformLayout();
             this.grpBoxCommands.ResumeLayout(false);
             this.grpBoxCommands.PerformLayout();
+            this.grpBoxMode.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -732,6 +784,10 @@
         private System.Windows.Forms.Button btnWriteProtect;
         private System.Windows.Forms.ComboBox cBoxReadoutPro;
         private System.Windows.Forms.Button btnReadoutPro;
+        private System.Windows.Forms.GroupBox grpBoxMode;
+        private System.Windows.Forms.Button btnExitBoot;
+        private System.Windows.Forms.Button btnReset;
+        private System.Windows.Forms.Button btnRefresh;
     }
 }
 
