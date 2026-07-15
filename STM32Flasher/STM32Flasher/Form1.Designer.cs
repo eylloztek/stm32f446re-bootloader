@@ -31,6 +31,7 @@
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(STM32Flasher));
             this.grpBoxConnection = new System.Windows.Forms.GroupBox();
+            this.btnRefresh = new System.Windows.Forms.Button();
             this.prgBarStatus = new System.Windows.Forms.ProgressBar();
             this.lblConnectionStatus = new System.Windows.Forms.Label();
             this.btnDisconnect = new System.Windows.Forms.Button();
@@ -85,9 +86,8 @@
             this.btnGetHelp = new System.Windows.Forms.Button();
             this.openFileDialog1 = new System.Windows.Forms.OpenFileDialog();
             this.grpBoxMode = new System.Windows.Forms.GroupBox();
-            this.btnReset = new System.Windows.Forms.Button();
             this.btnExitBoot = new System.Windows.Forms.Button();
-            this.btnRefresh = new System.Windows.Forms.Button();
+            this.btnReset = new System.Windows.Forms.Button();
             this.grpBoxConnection.SuspendLayout();
             this.grpBoxCommands.SuspendLayout();
             this.grpBoxMode.SuspendLayout();
@@ -114,6 +114,17 @@
             this.grpBoxConnection.TabIndex = 0;
             this.grpBoxConnection.TabStop = false;
             this.grpBoxConnection.Text = "Connection";
+            // 
+            // btnRefresh
+            // 
+            this.btnRefresh.BackgroundImage = global::STM32Flasher.Properties.Resources.refresh;
+            this.btnRefresh.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.btnRefresh.Location = new System.Drawing.Point(270, 26);
+            this.btnRefresh.Name = "btnRefresh";
+            this.btnRefresh.Size = new System.Drawing.Size(32, 31);
+            this.btnRefresh.TabIndex = 12;
+            this.btnRefresh.UseVisualStyleBackColor = true;
+            this.btnRefresh.Click += new System.EventHandler(this.btnRefresh_Click);
             // 
             // prgBarStatus
             // 
@@ -410,7 +421,7 @@
             // chBoxMassErase
             // 
             this.chBoxMassErase.AutoSize = true;
-            this.chBoxMassErase.Location = new System.Drawing.Point(519, 442);
+            this.chBoxMassErase.Location = new System.Drawing.Point(633, 435);
             this.chBoxMassErase.Name = "chBoxMassErase";
             this.chBoxMassErase.Size = new System.Drawing.Size(119, 24);
             this.chBoxMassErase.TabIndex = 35;
@@ -420,7 +431,7 @@
             // chBoxSelect7
             // 
             this.chBoxSelect7.AutoSize = true;
-            this.chBoxSelect7.Location = new System.Drawing.Point(393, 442);
+            this.chBoxSelect7.Location = new System.Drawing.Point(507, 435);
             this.chBoxSelect7.Name = "chBoxSelect7";
             this.chBoxSelect7.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect7.TabIndex = 34;
@@ -430,7 +441,7 @@
             // chBoxSelect6
             // 
             this.chBoxSelect6.AutoSize = true;
-            this.chBoxSelect6.Location = new System.Drawing.Point(283, 442);
+            this.chBoxSelect6.Location = new System.Drawing.Point(397, 435);
             this.chBoxSelect6.Name = "chBoxSelect6";
             this.chBoxSelect6.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect6.TabIndex = 33;
@@ -440,7 +451,7 @@
             // chBoxSelect5
             // 
             this.chBoxSelect5.AutoSize = true;
-            this.chBoxSelect5.Location = new System.Drawing.Point(169, 442);
+            this.chBoxSelect5.Location = new System.Drawing.Point(283, 435);
             this.chBoxSelect5.Name = "chBoxSelect5";
             this.chBoxSelect5.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect5.TabIndex = 32;
@@ -450,7 +461,7 @@
             // chBoxSelect4
             // 
             this.chBoxSelect4.AutoSize = true;
-            this.chBoxSelect4.Location = new System.Drawing.Point(638, 397);
+            this.chBoxSelect4.Location = new System.Drawing.Point(169, 435);
             this.chBoxSelect4.Name = "chBoxSelect4";
             this.chBoxSelect4.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect4.TabIndex = 31;
@@ -460,7 +471,7 @@
             // chBoxSelect3
             // 
             this.chBoxSelect3.AutoSize = true;
-            this.chBoxSelect3.Location = new System.Drawing.Point(519, 397);
+            this.chBoxSelect3.Location = new System.Drawing.Point(761, 397);
             this.chBoxSelect3.Name = "chBoxSelect3";
             this.chBoxSelect3.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect3.TabIndex = 30;
@@ -470,7 +481,7 @@
             // chBoxSelect2
             // 
             this.chBoxSelect2.AutoSize = true;
-            this.chBoxSelect2.Location = new System.Drawing.Point(393, 397);
+            this.chBoxSelect2.Location = new System.Drawing.Point(633, 397);
             this.chBoxSelect2.Name = "chBoxSelect2";
             this.chBoxSelect2.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect2.TabIndex = 29;
@@ -480,7 +491,7 @@
             // chBoxSelect1
             // 
             this.chBoxSelect1.AutoSize = true;
-            this.chBoxSelect1.Location = new System.Drawing.Point(283, 397);
+            this.chBoxSelect1.Location = new System.Drawing.Point(397, 397);
             this.chBoxSelect1.Name = "chBoxSelect1";
             this.chBoxSelect1.Size = new System.Drawing.Size(95, 24);
             this.chBoxSelect1.TabIndex = 28;
@@ -674,16 +685,6 @@
             this.grpBoxMode.TabStop = false;
             this.grpBoxMode.Text = "Mode";
             // 
-            // btnReset
-            // 
-            this.btnReset.Location = new System.Drawing.Point(103, 101);
-            this.btnReset.Name = "btnReset";
-            this.btnReset.Size = new System.Drawing.Size(128, 37);
-            this.btnReset.TabIndex = 15;
-            this.btnReset.Text = "Reset";
-            this.btnReset.UseVisualStyleBackColor = true;
-            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
-            // 
             // btnExitBoot
             // 
             this.btnExitBoot.Location = new System.Drawing.Point(103, 178);
@@ -694,16 +695,15 @@
             this.btnExitBoot.UseVisualStyleBackColor = true;
             this.btnExitBoot.Click += new System.EventHandler(this.btnExitBoot_Click);
             // 
-            // btnRefresh
+            // btnReset
             // 
-            this.btnRefresh.BackgroundImage = global::STM32Flasher.Properties.Resources.refresh;
-            this.btnRefresh.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.btnRefresh.Location = new System.Drawing.Point(270, 26);
-            this.btnRefresh.Name = "btnRefresh";
-            this.btnRefresh.Size = new System.Drawing.Size(32, 31);
-            this.btnRefresh.TabIndex = 12;
-            this.btnRefresh.UseVisualStyleBackColor = true;
-            this.btnRefresh.Click += new System.EventHandler(this.btnRefresh_Click);
+            this.btnReset.Location = new System.Drawing.Point(103, 101);
+            this.btnReset.Name = "btnReset";
+            this.btnReset.Size = new System.Drawing.Size(128, 37);
+            this.btnReset.TabIndex = 15;
+            this.btnReset.Text = "Reset";
+            this.btnReset.UseVisualStyleBackColor = true;
+            this.btnReset.Click += new System.EventHandler(this.btnReset_Click);
             // 
             // STM32Flasher
             // 

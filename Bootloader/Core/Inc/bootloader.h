@@ -31,11 +31,27 @@
 #define NACK							0x1F
 #define UNKNOWN							0x99
 
-#define SRAM1_END						0x2001BFFF
-#define SRAM2_END						0x2001FFFF
-#define BKPSRAM_END						0x40024FFF
+#define SRAM1_END						0x2001BFFFUL
+#define SRAM2_END						0x2001FFFFUL
+#define BKPSRAM_END						0x40024FFFUL
 
-#define F446NUMBEROFSECTOR				7
+/*
+ * Bootloader:
+ *   Sector 0 and Sector 1
+ *   0x08000000 - 0x08007FFF
+ *
+ * Application:
+ *   Sector 2 to Sector 7
+ *   Starts at 0x08008000
+ */
+
+#define APPLICATION_START_ADDRESS       0x08008000UL
+
+#define APPLICATION_FIRST_SECTOR        FLASH_SECTOR_2
+#define APPLICATION_LAST_SECTOR         FLASH_SECTOR_7
+
+#define APPLICATION_SECTOR_COUNT        \
+    ((APPLICATION_LAST_SECTOR - APPLICATION_FIRST_SECTOR) + 1U)
 
 void processBootloaderCommand(void);
 void handleGetVersion(void);

@@ -311,87 +311,163 @@ void handleWriteMemory(void) {
 }
 
 void handleErase(void) {
-	uint8_t response[1] = { 0 };
-	uint8_t offset = 3;
-	uint8_t N = messageBuffer[offset];
-	uint8_t receivedCheckSum = N;
-	uint8_t calculatedCheckSum = N;
+	uint8_t response = NACK;
+	const uint8_t offset = 3U;
 
-	if (N == 0xFF) {
-		receivedCheckSum = messageBuffer[offset + 1];
-		calculatedCheckSum = 0xFF ^ 0x00;
-		if (receivedCheckSum != calculatedCheckSum) {
-			response[0] = NACK;
-			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-			HAL_MAX_DELAY);
+	uint8_t n = (uint8_t) messageBuffer[offset];
+
+	/*
+	 * 0xFF normally represents a Mass Erase command.
+	 * Mass Erase is not supported because it would also erase
+	 * the sectors containing the bootloader.
+	 */
+	if (n == 0xFFU) {
+#ifdef DEBUG_PRINT
+		printf("Mass Erase rejected: bootloader sectors are protected.\r\n");
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * According to the protocol:
+	 *
+	 * Sector count = N + 1
+	 *
+	 * Only sectors 2 through 7 belong to the application.
+	 * Therefore, a maximum of six sectors may be requested.
+	 */
+	uint16_t sectorCount = (uint16_t) n + 1U;
+
+	if ((sectorCount == 0U) || (sectorCount > APPLICATION_SECTOR_COUNT)) {
+#ifdef DEBUG_PRINT
+		printf("Invalid erase sector count: %u\r\n",
+				(unsigned int) sectorCount);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * Checksum calculation:
+	 *
+	 * N XOR Sector1 XOR Sector2 XOR ...
+	 */
+	uint8_t calculatedChecksum = n;
+
+	for (uint16_t i = 0U; i < sectorCount; i++) {
+		calculatedChecksum ^= (uint8_t) messageBuffer[offset + 1U + i];
+	}
+
+	uint8_t receivedChecksum =
+			(uint8_t) messageBuffer[offset + 1U + sectorCount];
+
+	if (calculatedChecksum != receivedChecksum) {
+#ifdef DEBUG_PRINT
+		printf("Erase checksum error. Calculated: 0x%02X, Received: 0x%02X\r\n",
+				calculatedChecksum, receivedChecksum);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * Validate all requested sector numbers before unlocking
+	 * or modifying the flash memory.
+	 *
+	 * For example, if the packet contains:
+	 *
+	 * Sector 2, Sector 3, Sector 0
+	 *
+	 * the complete request is rejected before any sector is erased.
+	 * This prevents partial erase operations caused by an invalid
+	 * sector appearing later in the packet.
+	 */
+	uint32_t selectedSectorMask = 0U;
+
+	for (uint16_t i = 0U; i < sectorCount; i++) {
+		uint8_t sectorNumber = (uint8_t) messageBuffer[offset + 1U + i];
+
+		/*
+		 * Only application sectors are allowed.
+		 *
+		 * Sector 0 and Sector 1 contain the bootloader and
+		 * must never be erased by this command.
+		 */
+		if ((sectorNumber < APPLICATION_FIRST_SECTOR)
+				|| (sectorNumber > APPLICATION_LAST_SECTOR)) {
+#ifdef DEBUG_PRINT
+			printf("Erase rejected for protected or invalid sector: %u\r\n",
+					sectorNumber);
+#endif
+
+			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 			return;
 		}
-		HAL_FLASH_Unlock();
 
-		FLASH_EraseInitTypeDef eraseInit;
-		uint32_t sectorError;
+		uint32_t sectorBit = (1UL << sectorNumber);
 
-		eraseInit.TypeErase = FLASH_TYPEERASE_MASSERASE;
-		eraseInit.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-		eraseInit.Sector = FLASH_SECTOR_0;
-		eraseInit.NbSectors = 8;
+		/*
+		 * Reject packets containing the same sector more than once.
+		 */
+		if ((selectedSectorMask & sectorBit) != 0U) {
+#ifdef DEBUG_PRINT
+			printf("Duplicate sector rejected: %u\r\n", sectorNumber);
+#endif
 
-		response[0] = ACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-		HAL_MAX_DELAY);
-		if (HAL_FLASHEx_Erase(&eraseInit, &sectorError) != HAL_OK) {
-			response[0] = NACK;
-			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-			HAL_MAX_DELAY);
+			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+			return;
 		}
 
-		HAL_FLASH_Lock();
+		selectedSectorMask |= sectorBit;
+	}
+
+	if (HAL_FLASH_Unlock() != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Flash unlock failed.\r\n");
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 		return;
 	}
 
-	for (int i = 1; i <= N + 1; i++) {
-		calculatedCheckSum ^= messageBuffer[i + offset];
-	}
-	receivedCheckSum = messageBuffer[N + 2 + offset];
-
-	if (calculatedCheckSum != receivedCheckSum) {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-		HAL_MAX_DELAY);
-		return;
-	}
-
-	HAL_FLASH_Unlock();
-
-	FLASH_EraseInitTypeDef eraseInit;
-	uint32_t sectorError;
+	FLASH_EraseInitTypeDef eraseInit = { 0 };
+	uint32_t sectorError = 0xFFFFFFFFUL;
 
 	eraseInit.TypeErase = FLASH_TYPEERASE_SECTORS;
 	eraseInit.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-	eraseInit.NbSectors = 1;
+	eraseInit.NbSectors = 1U;
 
-	for (int i = 1; i <= N + 1; i++) {
-		uint8_t sectorNumber = messageBuffer[i + offset];
-
-		if (sectorNumber > F446NUMBEROFSECTOR)
-			continue;
+	for (uint16_t i = 0U; i < sectorCount; i++) {
+		uint8_t sectorNumber = (uint8_t) messageBuffer[offset + 1U + i];
 
 		eraseInit.Sector = sectorNumber;
 
+#ifdef DEBUG_PRINT
+		printf("Erasing application sector: %u\r\n", sectorNumber);
+#endif
+
 		if (HAL_FLASHEx_Erase(&eraseInit, &sectorError) != HAL_OK) {
-			response[0] = NACK;
-			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-			HAL_MAX_DELAY);
+#ifdef DEBUG_PRINT
+			printf("Sector erase failed. Requested: %u, Error sector: %lu\r\n",
+					sectorNumber, sectorError);
+#endif
+
 			HAL_FLASH_Lock();
+
+			response = NACK;
+			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 			return;
 		}
 	}
 
 	HAL_FLASH_Lock();
 
-	response[0] = ACK;
-	HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-	HAL_MAX_DELAY);
+	response = ACK;
+	HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 }
 
 void handleWriteProtectUnprotect(void) {

@@ -47,6 +47,26 @@ namespace STM32Flasher
 
             btnConnect.Enabled = true;
             btnDisconnect.Enabled = false;
+
+            /*
+            * Sector 0 and Sector 1 contain the bootloader.
+            * They must never be erased from this application.
+            */
+            chBoxSelect0.Checked = false;
+            chBoxSelect0.Enabled = false;
+            chBoxSelect0.Text = "Sector 0 (Bootloader)";
+
+            chBoxSelect1.Checked = false;
+            chBoxSelect1.Enabled = false;
+            chBoxSelect1.Text = "Sector 1 (Bootloader)";
+
+            /*
+             * Real Mass Erase would erase the bootloader as well.
+             * Application erase must be performed by selecting Sector 2-7.
+             */
+            chBoxMassErase.Checked = false;
+            chBoxMassErase.Enabled = false;
+            chBoxMassErase.Text = "Mass Erase (Disabled)";
         }
 
         private void btnConnect_Click(object sender, EventArgs e)
@@ -430,12 +450,36 @@ namespace STM32Flasher
 
         private void sendEraseData()
         {
-            byte[] data = new byte[258];
-            int index = 0;
+            /*
+             * Defense in depth:
+             *
+             * Bu kontroller UI üzerinde disabled olsa bile,
+             * herhangi bir kod değişikliği veya yanlış durum nedeniyle
+             * işaretlenmişlerse komut gönderilmez.
+             */
+            if (chBoxSelect0.Checked ||
+                chBoxSelect1.Checked ||
+                chBoxMassErase.Checked)
+            {
+                chBoxSelect0.Checked = false;
+                chBoxSelect1.Checked = false;
+                chBoxMassErase.Checked = false;
+
+                MessageBox.Show(
+                    "Sector 0, Sector 1 and Mass Erase are disabled because they can erase the bootloader.",
+                    "Protected Bootloader Area",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
 
             List<byte> selectedSectors = new List<byte>();
-            if (chBoxSelect0.Checked) selectedSectors.Add(0x00);
-            if (chBoxSelect1.Checked) selectedSectors.Add(0x01);
+
+            /*
+             * Only application sectors are allowed.
+             */
             if (chBoxSelect2.Checked) selectedSectors.Add(0x02);
             if (chBoxSelect3.Checked) selectedSectors.Add(0x03);
             if (chBoxSelect4.Checked) selectedSectors.Add(0x04);
@@ -443,37 +487,60 @@ namespace STM32Flasher
             if (chBoxSelect6.Checked) selectedSectors.Add(0x06);
             if (chBoxSelect7.Checked) selectedSectors.Add(0x07);
 
-            if (chBoxMassErase.Checked)
+            if (selectedSectors.Count == 0)
             {
-                data[0] = 0xFF;
-                data[1] = (byte)(data[0] ^ 0x00);
-                index = 2;
-            }
-            else
-            {
-                if (selectedSectors.Count == 0)
-                {
-                    MessageBox.Show("Please select sector or sectors.");
-                }
+                MessageBox.Show(
+                    "Please select at least one application sector between Sector 2 and Sector 7.",
+                    "No Application Sector Selected",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
 
-                byte N = (byte)(selectedSectors.Count - 1);
-                byte checkSum = N;
-                data[0] = N;
-                index = 1;
-                for (int i = 0; i < selectedSectors.Count; i++)
-                {
-                    data[index] = selectedSectors[i];
-                    checkSum ^= selectedSectors[i];
-                    index++;
-                }
-                data[index] = checkSum;
-                index++;
+                return;
             }
 
-            byte[] finalData = new byte[index];
-            Array.Copy(data, finalData, index);
-            byte cmd = (byte)BootloaderCommand.Erase;
-            SendBootLoaderCommand(cmd, finalData);
+            string sectorList = string.Join(
+                ", ",
+                selectedSectors.Select(sector => $"Sector {sector}")
+            );
+
+            DialogResult confirmation = MessageBox.Show(
+                $"The following application sectors will be erased:\n\n{sectorList}\n\nContinue?",
+                "Confirm Sector Erase",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2
+            );
+
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            /*
+             * Protocol:
+             *
+             * N = number of sectors - 1
+             * Checksum = N XOR Sector1 XOR Sector2 XOR ...
+             */
+            byte n = (byte)(selectedSectors.Count - 1);
+            byte checksum = n;
+
+            List<byte> payload = new List<byte>
+            {
+                n
+            };
+
+            foreach (byte sector in selectedSectors)
+            {
+                payload.Add(sector);
+                checksum ^= sector;
+            }
+
+            payload.Add(checksum);
+
+            byte command = (byte)BootloaderCommand.Erase;
+            SendBootLoaderCommand(command, payload.ToArray());
         }
 
         private void btnErase_Click(object sender, EventArgs e)
