@@ -299,7 +299,7 @@
             this.grpBoxCommands.Controls.Add(this.btnGetHelp);
             this.grpBoxCommands.Location = new System.Drawing.Point(402, 13);
             this.grpBoxCommands.Name = "grpBoxCommands";
-            this.grpBoxCommands.Size = new System.Drawing.Size(1016, 694);
+            this.grpBoxCommands.Size = new System.Drawing.Size(1016, 713);
             this.grpBoxCommands.TabIndex = 1;
             this.grpBoxCommands.TabStop = false;
             this.grpBoxCommands.Text = "Commands";
@@ -680,7 +680,7 @@
             this.grpBoxMode.Controls.Add(this.btnReset);
             this.grpBoxMode.Location = new System.Drawing.Point(13, 347);
             this.grpBoxMode.Name = "grpBoxMode";
-            this.grpBoxMode.Size = new System.Drawing.Size(383, 360);
+            this.grpBoxMode.Size = new System.Drawing.Size(383, 379);
             this.grpBoxMode.TabIndex = 2;
             this.grpBoxMode.TabStop = false;
             this.grpBoxMode.Text = "Mode";
@@ -710,7 +710,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.GradientInactiveCaption;
-            this.ClientSize = new System.Drawing.Size(1430, 719);
+            this.ClientSize = new System.Drawing.Size(1430, 738);
             this.Controls.Add(this.grpBoxMode);
             this.Controls.Add(this.grpBoxCommands);
             this.Controls.Add(this.grpBoxConnection);

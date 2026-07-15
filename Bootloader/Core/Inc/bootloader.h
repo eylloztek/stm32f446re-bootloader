@@ -15,21 +15,30 @@
 #define APPLICATION_HEADER				0x7E
 #define BOOTLOADER_VERSION				0x10
 
-#define GET_HELP						0x00
+#define GET_HELP							0x00
 #define GET_VERSION						0x01
 #define GET_ID							0x02
 #define READ_MEMORY						0x11
 #define GO_TO_ADDRESS					0x21
-#define WRITE_MEMORY					0x31
+#define WRITE_MEMORY						0x31
 #define ERASE							0x43
 #define WRITE_PROTECT_UNPROTECT			0x63
 #define READOUT_PROTECT_UNPROTECT		0x82
-#define GET_CHECKSUM					0xA1
+#define GET_CHECKSUM						0xA1
 #define RESET							0x89
 
 #define ACK								0x79
-#define NACK							0x1F
+#define NACK								0x1F
 #define UNKNOWN							0x99
+
+/*
+ * Readout protection request codes used by the custom protocol.
+ *
+ * These values are protocol-level identifiers and are intentionally
+ * different from the hardware option-byte values.
+ */
+#define RDP_REQUEST_LEVEL_0             	0x00U
+#define RDP_REQUEST_LEVEL_1             	0x01U
 
 #define SRAM1_END						0x2001BFFFUL
 #define SRAM2_END						0x2001FFFFUL

@@ -515,45 +515,227 @@ void handleWriteProtectUnprotect(void) {
 }
 
 void handleReadoutProtectUnprotect(void) {
-	uint8_t response[1] = { 0 };
-	uint8_t offset = 3;
-	uint8_t rdpLevel = 0xAA;
-	rdpLevel = messageBuffer[offset];
+	uint8_t response = NACK;
+	const uint8_t offset = 3U;
+	const uint8_t expectedCommandLength = 2U;
 
-	//for protection
-	if (rdpLevel == 0xCC) {
-		rdpLevel = 0xAA;
-	}
+	/*
+	 * The length field contains:
+	 *
+	 * Command byte + one RDP request byte
+	 */
+	if ((uint8_t) messageBuffer[1] != expectedCommandLength) {
+#ifdef DEBUG_PRINT
+		printf("Invalid RDP command length.\r\n");
+#endif
 
-	HAL_FLASH_OB_Unlock();
-	FLASH_OBProgramInitTypeDef obInit;
-	HAL_FLASHEx_OBGetConfig(&obInit);
-
-	if (rdpLevel == 0xAA) {
-		obInit.RDPLevel = OB_RDP_LEVEL0;
-	} else if (rdpLevel == 0xBB) {
-		obInit.RDPLevel = OB_RDP_LEVEL1;
-	} else if (rdpLevel == 0xCC) {
-		obInit.RDPLevel = OB_RDP_LEVEL2;
-	} else {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-		HAL_MAX_DELAY);
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 		return;
 	}
 
-	if (HAL_FLASHEx_OBProgram(&obInit) != HAL_OK) {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-		HAL_MAX_DELAY);
-		HAL_FLASH_OB_Lock();
+	/*
+	 * Validate the complete command packet checksum.
+	 */
+	uint16_t checksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
+
+	uint8_t calculatedChecksum = calculateCRC(messageBuffer, 1U,
+			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
+
+	uint8_t receivedChecksum = (uint8_t) messageBuffer[checksumIndex];
+
+	if (calculatedChecksum != receivedChecksum) {
+#ifdef DEBUG_PRINT
+		printf(
+				"RDP packet checksum error. Calculated: 0x%02X, Received: 0x%02X\r\n",
+				calculatedChecksum, receivedChecksum);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
 	}
 
-	response[0] = ACK;
-	HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-	HAL_MAX_DELAY);
-	HAL_FLASH_OB_Launch();
+	uint8_t requestedLevel = (uint8_t) messageBuffer[offset];
 
+	/*
+	 * Only RDP Level 0 and Level 1 requests are supported.
+	 * RDP Level 2 is intentionally rejected because it is irreversible.
+	 */
+	if ((requestedLevel != RDP_REQUEST_LEVEL_0)
+			&& (requestedLevel != RDP_REQUEST_LEVEL_1)) {
+#ifdef DEBUG_PRINT
+		printf("Unsupported RDP request: 0x%02X\r\n", requestedLevel);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	FLASH_OBProgramInitTypeDef optionBytes = { 0 };
+
+	HAL_FLASHEx_OBGetConfig(&optionBytes);
+
+	uint8_t currentLevel;
+
+	/*
+	 * Any value other than Level 0 and Level 2 represents
+	 * RDP Level 1 on STM32F4 devices.
+	 */
+	if ((uint8_t) optionBytes.RDPLevel == OB_RDP_LEVEL_0) {
+		currentLevel = RDP_REQUEST_LEVEL_0;
+	} else if ((uint8_t) optionBytes.RDPLevel == OB_RDP_LEVEL_2) {
+		currentLevel = 2U;
+	} else {
+		currentLevel = RDP_REQUEST_LEVEL_1;
+	}
+
+#ifdef DEBUG_PRINT
+	printf("Current RDP level: %u, Requested RDP level: %u\r\n", currentLevel,
+			requestedLevel);
+#endif
+
+	/*
+	 * No option-byte changes are possible after RDP Level 2
+	 * has been enabled.
+	 */
+	if (currentLevel == 2U) {
+#ifdef DEBUG_PRINT
+		printf("RDP request rejected: Level 2 is permanently active.\r\n");
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * A Level 1 to Level 0 regression causes a complete Flash
+	 * mass erase, including the bootloader sectors.
+	 */
+	if ((currentLevel == RDP_REQUEST_LEVEL_1)
+			&& (requestedLevel == RDP_REQUEST_LEVEL_0)) {
+#ifdef DEBUG_PRINT
+		printf("RDP Level 1 to Level 0 regression rejected because "
+				"it would mass-erase the entire Flash.\r\n");
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * Acknowledge the request without modifying the option bytes
+	 * when the requested level is already active.
+	 */
+	if (currentLevel == requestedLevel) {
+#ifdef DEBUG_PRINT
+		printf("Requested RDP level is already active.\r\n");
+#endif
+
+		response = ACK;
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * The only permitted state transition at this point is:
+	 *
+	 * RDP Level 0 -> RDP Level 1
+	 */
+	optionBytes.OptionType = OPTIONBYTE_RDP;
+	optionBytes.RDPLevel = OB_RDP_LEVEL_1;
+
+	if (HAL_FLASH_Unlock() != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Flash unlock failed during RDP configuration.\r\n");
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	if (HAL_FLASH_OB_Unlock() != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Option-byte unlock failed.\r\n");
+#endif
+
+		HAL_FLASH_Lock();
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * Prepare the requested RDP value in the option control register.
+	 * The actual option-byte programming starts when
+	 * HAL_FLASH_OB_Launch() is called.
+	 */
+	if (HAL_FLASHEx_OBProgram(&optionBytes) != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("RDP option-byte configuration failed. Flash error: 0x%08lX\r\n",
+				HAL_FLASH_GetError());
+#endif
+
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * Send ACK before starting option-byte programming.
+	 *
+	 * Enabling RDP Level 1 can terminate an active debug session
+	 * or require a reset before normal execution continues.
+	 * Therefore, no UART response should be expected after
+	 * HAL_FLASH_OB_Launch().
+	 */
+	response = ACK;
+
+	if (HAL_UART_Transmit(
+	UART_PORT, &response, 1U, 1000U) != HAL_OK) {
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+		return;
+	}
+
+	/*
+	 * Wait until the UART shift register has completely transmitted
+	 * the ACK byte before starting the option-byte operation.
+	 */
+	while (__HAL_UART_GET_FLAG(UART_PORT, UART_FLAG_TC) == RESET) {
+		/* Wait for transmission completion. */
+	}
+
+	HAL_Delay(20U);
+
+	/*
+	 * Start the actual option-byte programming operation.
+	 *
+	 * Code execution after this call must not be required for
+	 * protocol completion because the target may reset or an
+	 * active debug connection may be terminated.
+	 */
+	HAL_StatusTypeDef launchStatus = HAL_FLASH_OB_Launch();
+
+	if (launchStatus != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Option-byte launch failed. Flash error: 0x%08lX\r\n",
+				HAL_FLASH_GetError());
+#endif
+
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+		return;
+	}
+
+	HAL_FLASH_OB_Lock();
+	HAL_FLASH_Lock();
+
+	/*
+	 * Reload the new option-byte configuration.
+	 */
+	HAL_Delay(20U);
+	HAL_NVIC_SystemReset();
 }
 
 HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,

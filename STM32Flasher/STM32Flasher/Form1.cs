@@ -15,6 +15,120 @@ namespace STM32Flasher
     public partial class STM32Flasher : Form
     {
         List<byte> receivedData = new List<byte>();
+        private const byte BootloaderAck = 0x79;
+        private const byte BootloaderNack = 0x1F;
+
+        private readonly object statusResponseLock = new object();
+        private TaskCompletionSource<byte> pendingStatusResponse;
+
+        private TaskCompletionSource<byte> CreateStatusResponseWaiter()
+        {
+            lock (statusResponseLock)
+            {
+                if (pendingStatusResponse != null)
+                {
+                    throw new InvalidOperationException(
+                        "Another command is already waiting for a status response."
+                    );
+                }
+
+                pendingStatusResponse = new TaskCompletionSource<byte>(
+                    TaskCreationOptions.RunContinuationsAsynchronously
+                );
+
+                return pendingStatusResponse;
+            }
+        }
+
+        private void CompleteStatusResponse(byte[] receivedBytes)
+        {
+            byte statusByte = 0x00;
+            bool statusFound = false;
+
+            foreach (byte value in receivedBytes)
+            {
+                if ((value == BootloaderAck) ||
+                    (value == BootloaderNack))
+                {
+                    statusByte = value;
+                    statusFound = true;
+                    break;
+                }
+            }
+
+            if (!statusFound)
+            {
+                return;
+            }
+
+            TaskCompletionSource<byte> waiter = null;
+
+            lock (statusResponseLock)
+            {
+                if (pendingStatusResponse != null)
+                {
+                    waiter = pendingStatusResponse;
+                    pendingStatusResponse = null;
+                }
+            }
+
+            waiter?.TrySetResult(statusByte);
+        }
+
+        private void CancelStatusResponseWaiter(
+            TaskCompletionSource<byte> waiter)
+        {
+            lock (statusResponseLock)
+            {
+                if (ReferenceEquals(pendingStatusResponse, waiter))
+                {
+                    pendingStatusResponse = null;
+                }
+            }
+        }
+
+        private async Task<byte?> SendCommandAndWaitForStatusAsync(
+            byte command,
+            byte[] payload,
+            int timeoutMilliseconds = 3000)
+        {
+            if (!serialPort1.IsOpen)
+            {
+                throw new InvalidOperationException("Serial port is not open.");
+            }
+
+            /*
+             * Remove stale response bytes before starting a new
+             * request-response transaction.
+             */
+            serialPort1.DiscardInBuffer();
+
+            TaskCompletionSource<byte> waiter =
+                CreateStatusResponseWaiter();
+
+            try
+            {
+                SendBootLoaderCommand(command, payload);
+
+                Task timeoutTask = Task.Delay(timeoutMilliseconds);
+
+                Task completedTask = await Task.WhenAny(
+                    waiter.Task,
+                    timeoutTask
+                );
+
+                if (completedTask != waiter.Task)
+                {
+                    return null;
+                }
+
+                return await waiter.Task;
+            }
+            finally
+            {
+                CancelStatusResponseWaiter(waiter);
+            }
+        }
         public STM32Flasher()
         {
             InitializeComponent();
@@ -67,6 +181,15 @@ namespace STM32Flasher
             chBoxMassErase.Checked = false;
             chBoxMassErase.Enabled = false;
             chBoxMassErase.Text = "Mass Erase (Disabled)";
+
+            /*
+            * RDP Level 2 is intentionally not exposed because it is irreversible.
+            */
+            cBoxReadoutPro.Items.Clear();
+            cBoxReadoutPro.Items.Add("Level 0 (No Protection)");
+            cBoxReadoutPro.Items.Add("Level 1 (Read Protection)");
+            cBoxReadoutPro.SelectedIndex = 0;
+            cBoxReadoutPro.DropDownStyle = ComboBoxStyle.DropDownList;
         }
 
         private void btnConnect_Click(object sender, EventArgs e)
@@ -151,23 +274,57 @@ namespace STM32Flasher
             try
             {
                 int bytesToRead = serialPort1.BytesToRead;
+
+                if (bytesToRead <= 0)
+                {
+                    return;
+                }
+
                 byte[] buffer = new byte[bytesToRead];
-                serialPort1.Read(buffer, 0, bytesToRead);
+                int bytesRead = serialPort1.Read(buffer, 0,buffer.Length);
+
+                if (bytesRead <= 0)
+                {
+                    return;
+                }
+
+                if (bytesRead != buffer.Length)
+                {
+                    Array.Resize(ref buffer, bytesRead);
+                }
+
+                /*
+                * Complete an active ACK/NACK request before updating the UI.
+                */
+                CompleteStatusResponse(buffer);
 
                 receivedData.AddRange(buffer);
 
                 string hexOutput = BitConverter.ToString(buffer).Replace("-", " ");
 
-                this.Invoke(new Action(() =>
+                BeginInvoke(new Action(() =>
                 {
-                    txtReceiveMessage.AppendText(hexOutput + Environment.NewLine);
-                    txtReceiveMessage.SelectionStart = txtReceiveMessage.TextLength;
+                    txtReceiveMessage.AppendText(
+                        hexOutput + Environment.NewLine
+                    );
+
+                    txtReceiveMessage.SelectionStart =
+                        txtReceiveMessage.TextLength;
+
                     txtReceiveMessage.ScrollToCaret();
                 }));
 
             } catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show(
+                        ex.Message,
+                        "Serial Port Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                }));
             }
 
         }
@@ -589,36 +746,173 @@ namespace STM32Flasher
             sendWriteProtectUnprotect();
         }
 
-        private void sendReadOutProtectionData()
+        private async Task SendReadoutProtectionDataAsync()
         {
-            byte rdpLevel = 0xAA;
+            if (!serialPort1.IsOpen)
+            {
+                MessageBox.Show(
+                    "Serial port is not open.",
+                    "Connection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            byte requestedLevel;
+            string selectedLevelText;
 
             switch (cBoxReadoutPro.SelectedIndex)
             {
                 case 0:
-                    rdpLevel = 0xAA;
+                    requestedLevel = 0x00;
+                    selectedLevelText = "RDP Level 0";
                     break;
+
                 case 1:
-                    rdpLevel = 0xBB;
+                    requestedLevel = 0x01;
+                    selectedLevelText = "RDP Level 1";
                     break;
-                case 2:
-                    rdpLevel = 0xCC;
-                    break;
+
                 default:
-                    MessageBox.Show("Invalid Selection");
+                    MessageBox.Show(
+                        "Please select a valid RDP level.",
+                        "Invalid Selection",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+
                     return;
             }
 
-            byte[] payload = new byte[] { rdpLevel };
-            byte cmd = (byte)BootloaderCommand.ReadoutProtect;
-            SendBootLoaderCommand(cmd, payload);
+            if (requestedLevel == 0x00)
+            {
+                DialogResult level0Confirmation = MessageBox.Show(
+                    "This command only confirms Level 0 when the device is already unprotected.\n\n" +
+                    "A Level 1 to Level 0 regression would mass-erase the entire Flash and is therefore blocked by the bootloader.\n\n" +
+                    "Continue?",
+                    "RDP Level 0",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information,
+                    MessageBoxDefaultButton.Button2
+                );
 
-            MessageBox.Show($"Selected RDP Level:{cBoxReadoutPro.SelectedItem}");
+                if (level0Confirmation != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                DialogResult level1Confirmation = MessageBox.Show(
+                    "RDP Level 1 will prevent external read access through debugging and programming interfaces.\n\n" +
+                    "Returning from Level 1 to Level 0 requires a complete Flash mass erase.\n\n" +
+                    "Continue?",
+                    "Enable RDP Level 1",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2
+                );
+
+                if (level1Confirmation != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            byte[] payload = {requestedLevel};
+
+            byte command = (byte)BootloaderCommand.ReadoutProtect;
+
+            btnReadoutPro.Enabled = false;
+            cBoxReadoutPro.Enabled = false;
+
+            try
+            {
+                byte? response = await SendCommandAndWaitForStatusAsync(
+                    command,
+                    payload,
+                    3000
+                );
+
+                if (!response.HasValue)
+                {
+                    MessageBox.Show(
+                        "No ACK or NACK response was received from the bootloader.",
+                        "RDP Request Timeout",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                if (response.Value == BootloaderAck)
+                {
+                    if (requestedLevel == 0x00)
+                    {
+                        MessageBox.Show(
+                            "The device is already operating at RDP Level 0.",
+                            "RDP Level Confirmed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            "The RDP Level 1 request was accepted.\n\n" +
+                            "The microcontroller will program the option bytes and reset. " +
+                            "If the target does not restart normally, disconnect the active debugger and perform a power cycle.",
+                            "RDP Request Accepted",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information
+                        );
+                    }
+
+                    return;
+                }
+
+                if (requestedLevel == 0x00)
+                {
+                    MessageBox.Show(
+                        "The Level 0 request was rejected.\n\n" +
+                        "If the device is currently at Level 1, returning to Level 0 is blocked because it would mass-erase both the bootloader and application.",
+                        "RDP Request Rejected",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"{selectedLevelText} could not be enabled. The bootloader returned NACK.",
+                        "RDP Programming Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "RDP Command Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            finally
+            {
+                btnReadoutPro.Enabled = true;
+                cBoxReadoutPro.Enabled = true;
+            }
         }
 
-        private void btnReadoutPro_Click(object sender, EventArgs e)
+        private async void btnReadoutPro_Click(object sender, EventArgs e)
         {
-            sendReadOutProtectionData();
+            await SendReadoutProtectionDataAsync();
         }
 
         private void btnReset_Click(object sender, EventArgs e)
