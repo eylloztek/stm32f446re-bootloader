@@ -16,6 +16,7 @@ namespace STM32Flasher
     {
         List<byte> receivedData = new List<byte>();
         private const byte BootloaderAck = 0x79;
+        private const byte BootloaderWriteComplete = 0x7A;
         private const byte BootloaderNack = 0x1F;
 
         private readonly object statusResponseLock = new object();
@@ -48,6 +49,7 @@ namespace STM32Flasher
             foreach (byte value in receivedBytes)
             {
                 if ((value == BootloaderAck) ||
+                    (value == BootloaderWriteComplete) ||
                     (value == BootloaderNack))
                 {
                     statusByte = value;
@@ -129,6 +131,109 @@ namespace STM32Flasher
                 CancelStatusResponseWaiter(waiter);
             }
         }
+
+        private async Task<byte?> SendRawDataAndWaitForStatusAsync(byte[] data, int timeoutMilliseconds = 5000)
+        {
+            if (!serialPort1.IsOpen)
+            {
+                throw new InvalidOperationException(
+                    "Serial port is not open."
+                );
+            }
+
+            if ((data == null) || (data.Length == 0))
+            {
+                throw new ArgumentException(
+                    "The data block cannot be null or empty.",
+                    nameof(data)
+                );
+            }
+
+            TaskCompletionSource<byte> waiter =
+                CreateStatusResponseWaiter();
+
+            try
+            {
+                /*
+                 * The waiter is created before writing the block so that
+                 * a fast bootloader response cannot be missed.
+                 */
+                serialPort1.Write(data, 0,data.Length);
+
+                Task timeoutTask =
+                    Task.Delay(timeoutMilliseconds);
+
+                Task completedTask =
+                    await Task.WhenAny(
+                        waiter.Task,
+                        timeoutTask
+                    );
+
+                if (completedTask != waiter.Task)
+                {
+                    return null;
+                }
+
+                return await waiter.Task;
+            }
+            finally
+            {
+                CancelStatusResponseWaiter(waiter);
+            }
+        }
+
+        private byte[] CreateWriteBlockPacket(byte[] sourceData, int offset, int blockLength)
+        {
+            if (sourceData == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(sourceData)
+                );
+            }
+
+            if ((blockLength < 1) || (blockLength > 256))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(blockLength),
+                    "The block length must be between 1 and 256 bytes."
+                );
+            }
+
+            if ((offset < 0) ||
+                (offset + blockLength > sourceData.Length))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset)
+                );
+            }
+
+            /*
+             * Packet format:
+             *
+             * N        : 1 byte
+             * Data     : 1-256 bytes
+             * Checksum : 1 byte
+             */
+            byte[] packet = new byte[blockLength + 2];
+
+            byte n = (byte)(blockLength - 1);
+
+            packet[0] = n;
+
+            Array.Copy(sourceData, offset, packet, 1, blockLength);
+
+            byte checksum = n;
+
+            for (int i = 0; i < blockLength; i++)
+            {
+                checksum ^= packet[i + 1];
+            }
+
+            packet[packet.Length - 1] = checksum;
+
+            return packet;
+        }
+
         public STM32Flasher()
         {
             InitializeComponent();
@@ -566,6 +671,205 @@ namespace STM32Flasher
 
         }
 
+        private async Task WriteMemoryAsync(uint address)
+        {
+            if (!serialPort1.IsOpen)
+            {
+                MessageBox.Show(
+                    "Serial port is not open.",
+                    "Connection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            if ((binData == null) || (binData.Length == 0))
+            {
+                MessageBox.Show(
+                    "The selected binary file is empty or could not be loaded.",
+                    "Invalid Binary File",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            byte[] payload = new byte[9];
+
+            /*
+             * Destination address in big-endian format.
+             */
+            payload[0] = (byte)((address >> 24) & 0xFFU);
+            payload[1] = (byte)((address >> 16) & 0xFFU);
+            payload[2] = (byte)((address >> 8) & 0xFFU);
+            payload[3] = (byte)(address & 0xFFU);
+
+            payload[4] =
+                (byte)(payload[0] ^ payload[1] ^ payload[2] ^ payload[3]);
+
+            uint totalLength = (uint)binData.Length;
+
+            /*
+             * Complete image length in big-endian format.
+             */
+            payload[5] = (byte)((totalLength >> 24) & 0xFFU);
+            payload[6] = (byte)((totalLength >> 16) & 0xFFU);
+            payload[7] = (byte)((totalLength >> 8) & 0xFFU);
+            payload[8] = (byte)(totalLength & 0xFFU);
+
+            byte command = (byte)BootloaderCommand.WriteMemory;
+
+            /*
+             * Remove stale UART data before starting a new firmware
+             * write transaction.
+             */
+            serialPort1.DiscardInBuffer();
+
+            byte? readyResponse =
+                await SendCommandAndWaitForStatusAsync(command, payload, 3000);
+
+            if (!readyResponse.HasValue)
+            {
+                MessageBox.Show(
+                    "The bootloader did not respond to the Write Memory command.",
+                    "Write Command Timeout",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            if (readyResponse.Value == BootloaderNack)
+            {
+                MessageBox.Show(
+                    "The bootloader rejected the Write Memory command.",
+                    "Write Command Rejected",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            if (readyResponse.Value != BootloaderAck)
+            {
+                MessageBox.Show(
+                    $"Unexpected bootloader response: 0x{readyResponse.Value:X2}",
+                    "Protocol Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            int offset = 0;
+            int blockNumber = 0;
+
+            int totalBlocks = (binData.Length + 255) / 256;
+
+            while (offset < binData.Length)
+            {
+                int remaining = binData.Length - offset;
+
+                int currentBlockLength = Math.Min(256, remaining);
+
+                bool isFinalBlock = (offset + currentBlockLength) == binData.Length;
+
+                byte[] blockPacket =
+                    CreateWriteBlockPacket(binData, offset, currentBlockLength);
+
+                blockNumber++;
+
+                byte? blockResponse =
+                    await SendRawDataAndWaitForStatusAsync(blockPacket, 5000);
+
+                if (!blockResponse.HasValue)
+                {
+                    MessageBox.Show(
+                        $"No response was received for block {blockNumber} of {totalBlocks}.",
+                        "Firmware Write Timeout",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                if (blockResponse.Value == BootloaderNack)
+                {
+                    MessageBox.Show(
+                        $"The bootloader rejected block {blockNumber} of {totalBlocks}.",
+                        "Firmware Write Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                if (isFinalBlock)
+                {
+                    if (blockResponse.Value != BootloaderWriteComplete)
+                    {
+                        MessageBox.Show(
+                            $"The final block returned an unexpected response: " +
+                            $"0x{blockResponse.Value:X2}",
+                            "Firmware Completion Error",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error
+                        );
+
+                        return;
+                    }
+                }
+                else
+                {
+                    if (blockResponse.Value != BootloaderAck)
+                    {
+                        MessageBox.Show(
+                            $"Block {blockNumber} returned an unexpected response: " +
+                            $"0x{blockResponse.Value:X2}",
+                            "Firmware Protocol Error",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error
+                        );
+
+                        return;
+                    }
+                }
+
+                offset += currentBlockLength;
+
+                int progress = (int)((offset * 100L) / binData.Length);
+
+                /*
+                 * prgBarStatus is currently also used for connection status.
+                 * It is temporarily reused to display firmware write progress.
+                 */
+                prgBarStatus.Value =
+                    Math.Max(
+                        prgBarStatus.Minimum,
+                        Math.Min(
+                            prgBarStatus.Maximum,
+                            progress
+                        )
+                    );
+            }
+
+            MessageBox.Show(
+                $"Firmware was written successfully.\n\n" +
+                $"Bytes written: {binData.Length}\n" +
+                $"Blocks written: {totalBlocks}",
+                "Firmware Write Complete",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        }
         private void sendBytesToSTM32(byte[] data)
         {
             if (serialPort1.IsOpen)
@@ -579,11 +883,30 @@ namespace STM32Flasher
 
         }
 
-        private void btnWriteMem_Click(object sender, EventArgs e)
+        private async void btnWriteMem_Click(object sender,EventArgs e)
         {
-            if (txtWriteMem.Text == "" || txtBrowseFile.Text == "")
+            if (string.IsNullOrWhiteSpace(txtWriteMem.Text) ||
+                string.IsNullOrWhiteSpace(txtBrowseFile.Text))
             {
-                MessageBox.Show("Please enter the address and select the bin file", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    "Please enter the destination address and select a binary file.",
+                    "Missing Write Parameters",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            if ((binData == null) || (binData.Length == 0))
+            {
+                MessageBox.Show(
+                    "The selected binary file is empty or has not been loaded.",
+                    "Invalid Binary File",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
                 return;
             }
 
@@ -591,17 +914,53 @@ namespace STM32Flasher
             {
                 string addressText = txtWriteMem.Text.Trim();
 
-                if (addressText.StartsWith("0x"))
+                if (addressText.StartsWith("0x",StringComparison.OrdinalIgnoreCase))
                 {
                     addressText = addressText.Substring(2);
                 }
+
                 uint address = Convert.ToUInt32(addressText, 16);
 
-                sendWriteMemoryData(address);
+                btnWriteMem.Enabled = false;
+                btnBrowse.Enabled = false;
+                txtWriteMem.Enabled = false;
+
+                prgBarStatus.Value = 0;
+
+                await WriteMemoryAsync(address);
+            }
+            catch (FormatException)
+            {
+                MessageBox.Show(
+                    "The destination address is not a valid hexadecimal value.",
+                    "Invalid Address",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            catch (OverflowException)
+            {
+                MessageBox.Show(
+                    "The destination address is outside the UInt32 range.",
+                    "Invalid Address",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(
+                    ex.Message,
+                    "Firmware Write Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            finally
+            {
+                btnWriteMem.Enabled = true;
+                btnBrowse.Enabled = true;
+                txtWriteMem.Enabled = true;
             }
         }
 

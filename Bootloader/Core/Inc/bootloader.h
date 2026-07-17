@@ -28,8 +28,12 @@
 #define RESET							0x89
 
 #define ACK								0x79
+#define WRITE_COMPLETE                  	0x7AU
 #define NACK								0x1F
 #define UNKNOWN							0x99
+
+#define WRITE_COMMAND_TIMEOUT_MS        	3000U
+#define WRITE_BLOCK_TIMEOUT_MS          	5000U
 
 /*
  * Readout protection request codes used by the custom protocol.
