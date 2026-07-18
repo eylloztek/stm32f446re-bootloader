@@ -44,10 +44,6 @@
 #define RDP_REQUEST_LEVEL_0             	0x00U
 #define RDP_REQUEST_LEVEL_1             	0x01U
 
-#define SRAM1_END						0x2001BFFFUL
-#define SRAM2_END						0x2001FFFFUL
-#define BKPSRAM_END						0x40024FFFUL
-
 /*
  * Bootloader:
  *   Sector 0 and Sector 1
@@ -58,7 +54,13 @@
  *   Starts at 0x08008000
  */
 
+#define FLASH_MEMORY_START_ADDRESS      0x08000000UL
+#define FLASH_MEMORY_END_ADDRESS        0x0807FFFFUL
+
 #define APPLICATION_START_ADDRESS       0x08008000UL
+#define APPLICATION_END_ADDRESS         0x0807FFFFUL
+#define APPLICATION_MAX_SIZE            \
+    ((APPLICATION_END_ADDRESS - APPLICATION_START_ADDRESS) + 1UL)
 
 #define APPLICATION_FIRST_SECTOR        FLASH_SECTOR_2
 #define APPLICATION_LAST_SECTOR         FLASH_SECTOR_7
@@ -66,13 +68,18 @@
 #define APPLICATION_SECTOR_COUNT        \
     ((APPLICATION_LAST_SECTOR - APPLICATION_FIRST_SECTOR) + 1U)
 
+#define SRAM_MEMORY_START_ADDRESS       0x20000000UL
+#define SRAM_MEMORY_END_ADDRESS         0x2001FFFFUL
+
+#define BACKUP_SRAM_START_ADDRESS       0x40024000UL
+#define BACKUP_SRAM_END_ADDRESS         0x40024FFFUL
+
 void processBootloaderCommand(void);
 void handleGetVersion(void);
 void handleGetHelp(void);
 void handleGetID(void);
 void handleReadMemory(void);
-uint8_t verifyAddress(uint32_t address);
-HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
+HAL_StatusTypeDef flashWrite(uint32_t address, const uint8_t *data,
 		uint32_t dataLength);
 void handleGoToAddress(void);
 void handleWriteMemory(void);
@@ -82,5 +89,9 @@ void handleReadoutProtectUnprotect(void);
 void handleResetOperation(void);
 void handleUnknownCommand(void);
 uint8_t calculateCRC(char *data, uint16_t startIndex, uint16_t length);
+uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length, uint32_t regionStart, uint32_t regionEnd);
+uint8_t verifyReadRange(uint32_t address, uint32_t length);
+uint8_t verifyWriteRange(uint32_t address, uint32_t length);
+uint8_t verifyGoAddress(uint32_t address);
 
 #endif /* INC_BOOTLOADER_H_ */

@@ -19,6 +19,20 @@ namespace STM32Flasher
         private const byte BootloaderWriteComplete = 0x7A;
         private const byte BootloaderNack = 0x1F;
 
+        private const uint FlashMemoryStartAddress = 0x08000000U;
+        private const uint FlashMemoryEndAddress = 0x0807FFFFU;
+
+        private const uint ApplicationStartAddress = 0x08008000U;
+        private const uint ApplicationEndAddress = 0x0807FFFFU;
+
+        private const uint SramStartAddress = 0x20000000U;
+        private const uint SramEndAddress = 0x2001FFFFU;
+
+        private const uint BackupSramStartAddress = 0x40024000U;
+        private const uint BackupSramEndAddress = 0x40024FFFU;
+
+        private const int MaximumReadLength = 256;
+
         private readonly object statusResponseLock = new object();
         private TaskCompletionSource<byte> pendingStatusResponse;
 
@@ -232,6 +246,54 @@ namespace STM32Flasher
             packet[packet.Length - 1] = checksum;
 
             return packet;
+        }
+
+        private static bool IsRangeInsideMemoryRegion(uint address, uint length, uint regionStart, uint regionEnd)
+        {
+            if (length == 0U)
+            {
+                return false;
+            }
+
+            if ((address < regionStart) || (address > regionEnd))
+            {
+                return false;
+            }
+
+            return (length - 1U) <= (regionEnd - address);
+        }
+
+        private static bool IsReadableRange(uint address, uint length)
+        {
+            return
+                IsRangeInsideMemoryRegion(
+                    address,
+                    length,
+                    FlashMemoryStartAddress,
+                    FlashMemoryEndAddress
+                ) ||
+                IsRangeInsideMemoryRegion(
+                    address,
+                    length,
+                    SramStartAddress,
+                    SramEndAddress
+                ) ||
+                IsRangeInsideMemoryRegion(
+                    address,
+                    length,
+                    BackupSramStartAddress,
+                    BackupSramEndAddress
+                );
+        }
+
+        private static bool IsApplicationWriteRange(uint address, uint length)
+        {
+            return IsRangeInsideMemoryRegion(
+                address,
+                length,
+                ApplicationStartAddress,
+                ApplicationEndAddress
+            );
         }
 
         public STM32Flasher()
@@ -456,8 +518,17 @@ namespace STM32Flasher
             SendBootLoaderCommand(cmd, new byte[0]);
         }
 
-        private void sendReadMemoryData(uint address, byte length)
+        private void sendReadMemoryData(uint address, int length)
         {
+
+            if ((length < 1) || (length > MaximumReadLength))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(length),
+                    $"Read length must be between 1 and {MaximumReadLength} bytes."
+                );
+            }
+
             byte[] data = new byte[7];
             //address -> msb to lsb
             data[0] = (byte)((address>>24) & 0xFF); //msb
@@ -479,9 +550,15 @@ namespace STM32Flasher
         private void btnReadMemory_Click(object sender, EventArgs e)
         {
 
-            if (txtAddress.Text == "" || txtLength.Text == "")
+            if (string.IsNullOrWhiteSpace(txtAddress.Text) || string.IsNullOrWhiteSpace(txtLength.Text))
             {
-                MessageBox.Show("Please enter the address and the length values.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    "Please enter the address and length values.",
+                    "Missing Read Parameters",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
                 return;
             }
 
@@ -489,26 +566,80 @@ namespace STM32Flasher
             {
                 string addressText = txtAddress.Text.Trim();
 
-                if (addressText.StartsWith("0x"))
+                if (addressText.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 {
                     addressText = addressText.Substring(2);
                 }
 
                 uint address = Convert.ToUInt32(addressText, 16);
 
-                byte length = byte.Parse(txtLength.Text);
-
-                if(length > 255)
+                if (!int.TryParse(txtLength.Text.Trim(), out int length))
                 {
-                    MessageBox.Show("256 bytes maximum", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(
+                        "The read length must be a decimal number.",
+                        "Invalid Read Length",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
 
+                    return;
                 }
-                sendReadMemoryData(address, length);
 
-            } 
-            catch (Exception ex) 
+                if ((length < 1) || (length > MaximumReadLength))
+                {
+                    MessageBox.Show(
+                        $"The read length must be between 1 and " +
+                        $"{MaximumReadLength} bytes.",
+                        "Invalid Read Length",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+
+                    return;
+                }
+
+                if (!IsReadableRange(address, (uint)length))
+                {
+                    MessageBox.Show(
+                        $"The requested memory range is invalid.\n\n" +
+                        $"Start address: 0x{address:X8}\n" +
+                        $"Length: {length} bytes",
+                        "Invalid Memory Range",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                sendReadMemoryData(address, length);
+            }
+            catch (FormatException)
             {
-                MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); 
+                MessageBox.Show(
+                    "The address is not a valid hexadecimal value.",
+                    "Invalid Address",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            catch (OverflowException)
+            {
+                MessageBox.Show(
+                    "The address is outside the UInt32 range.",
+                    "Invalid Address",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "Read Memory Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
             }
 
         }
@@ -579,6 +710,20 @@ namespace STM32Flasher
                 }
                 uint address = Convert.ToUInt32(addressText, 16);
 
+                if (address != ApplicationStartAddress)
+                {
+                    MessageBox.Show(
+                        $"The Go command only accepts the application vector table address.\n\n" +
+                        $"Expected address: 0x{ApplicationStartAddress:X8}\n" +
+                        $"Entered address: 0x{address:X8}",
+                        "Invalid Application Address",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
                 sendGoAddressData(address);
             }
             catch (Exception ex)
@@ -628,6 +773,24 @@ namespace STM32Flasher
                 return;
             }
 
+            uint imageLength = (uint)binData.Length;
+
+            if (!IsApplicationWriteRange(address, imageLength))
+            {
+                MessageBox.Show(
+                    $"The firmware image does not fit inside the application area.\n\n" +
+                    $"Application start: 0x{ApplicationStartAddress:X8}\n" +
+                    $"Application end: 0x{ApplicationEndAddress:X8}\n" +
+                    $"Write address: 0x{address:X8}\n" +
+                    $"Image length: {imageLength} bytes",
+                    "Invalid Firmware Range",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
             byte[] payload = new byte[9];
 
             /*
@@ -638,10 +801,9 @@ namespace STM32Flasher
             payload[2] = (byte)((address >> 8) & 0xFFU);
             payload[3] = (byte)(address & 0xFFU);
 
-            payload[4] =
-                (byte)(payload[0] ^ payload[1] ^ payload[2] ^ payload[3]);
+            payload[4] = (byte)(payload[0] ^ payload[1] ^ payload[2] ^ payload[3]);
 
-            uint totalLength = (uint)binData.Length;
+            uint totalLength = imageLength;
 
             /*
              * Complete image length in big-endian format.

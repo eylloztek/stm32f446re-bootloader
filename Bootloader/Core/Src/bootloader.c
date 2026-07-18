@@ -138,55 +138,117 @@ void handleGetID(void) {
 }
 
 void handleReadMemory(void) {
-	uint8_t response[1] = { 0 };
-	uint8_t offset = 3;
+	uint8_t response = NACK;
+	const uint8_t offset = 3U;
+	const uint8_t expectedCommandLength = 8U;
 
-	uint32_t address = (messageBuffer[offset] << 24)
-			| (messageBuffer[offset + 1] << 16)
-			| (messageBuffer[offset + 2] << 8) | (messageBuffer[offset + 3]);
-
-	uint8_t addressChecksum = messageBuffer[offset + 4];
-	uint8_t calculatedChecksum = (messageBuffer[offset])
-			^ (messageBuffer[offset + 1]) ^ (messageBuffer[offset + 2])
-			^ (messageBuffer[offset + 3]);
-
-	if (addressChecksum != calculatedChecksum) {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
-		return;
-	}
-
-	uint8_t N = messageBuffer[offset + 5];
-	uint8_t NComplement = messageBuffer[offset + 6];
-
+	/*
+	 * The command length contains:
+	 *
+	 * Command byte       : 1 byte
+	 * Address            : 4 bytes
+	 * Address checksum   : 1 byte
+	 * N                  : 1 byte
+	 * N complement       : 1 byte
+	 *
+	 * Total              : 8 bytes
+	 */
+	if ((uint8_t) messageBuffer[1] != expectedCommandLength) {
 #ifdef DEBUG_PRINT
-	printf("N: 0x%02X\r\n", N);
-	printf("NComplement: 0x%02X\r\n", NComplement);
-	printf("XOR: 0x%02X\r\n", (uint8_t) (N ^ NComplement));
+		printf("Invalid Read Memory command length: %u\r\n",
+				(uint8_t) messageBuffer[1]);
 #endif
 
-	if ((uint8_t) (N ^ NComplement) != 0xFF) {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 		return;
 	}
 
-	uint8_t addressIsValid = verifyAddress(address);
+	/*
+	 * Validate the outer command packet checksum.
+	 */
+	uint16_t packetChecksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
 
-	if (!addressIsValid) {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
+			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
+
+	uint8_t receivedPacketChecksum =
+			(uint8_t) messageBuffer[packetChecksumIndex];
+
+	if (calculatedPacketChecksum != receivedPacketChecksum) {
+#ifdef DEBUG_PRINT
+		printf("Read Memory packet checksum error. "
+				"Calculated: 0x%02X, Received: 0x%02X\r\n",
+				calculatedPacketChecksum, receivedPacketChecksum);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 		return;
 	}
 
-	response[0] = ACK;
-	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
+			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
+			| ((uint32_t) (uint8_t) messageBuffer[offset + 2U] << 8U)
+			| ((uint32_t) (uint8_t) messageBuffer[offset + 3U]);
 
-	uint8_t numberOfBytes = N + 1;
-	uint8_t buffer[256];
-	memcpy(buffer, (uint8_t*) address, numberOfBytes);
-	HAL_UART_Transmit(UART_PORT, buffer, numberOfBytes, HAL_MAX_DELAY);
+	uint8_t receivedAddressChecksum = (uint8_t) messageBuffer[offset + 4U];
 
+	uint8_t calculatedAddressChecksum = (uint8_t) messageBuffer[offset]
+			^ (uint8_t) messageBuffer[offset + 1U]
+			^ (uint8_t) messageBuffer[offset + 2U]
+			^ (uint8_t) messageBuffer[offset + 3U];
+
+	if (receivedAddressChecksum != calculatedAddressChecksum) {
+#ifdef DEBUG_PRINT
+		printf("Read Memory address checksum error. "
+				"Calculated: 0x%02X, Received: 0x%02X\r\n",
+				calculatedAddressChecksum, receivedAddressChecksum);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	uint8_t n = (uint8_t) messageBuffer[offset + 5U];
+
+	uint8_t nComplement = (uint8_t) messageBuffer[offset + 6U];
+
+	if ((uint8_t) (n ^ nComplement) != 0xFFU) {
+#ifdef DEBUG_PRINT
+		printf("Read Memory length complement error. "
+				"N: 0x%02X, Complement: 0x%02X\r\n", n, nComplement);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	/*
+	 * uint16_t is required because N = 255 represents
+	 * a 256-byte read operation.
+	 */
+	uint16_t numberOfBytes = (uint16_t) n + 1U;
+
+	if (!verifyReadRange(address, (uint32_t) numberOfBytes)) {
+#ifdef DEBUG_PRINT
+		printf("Read Memory range rejected. "
+				"Address: 0x%08lX, Length: %u\r\n", address, numberOfBytes);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	response = ACK;
+
+	HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
+	uint8_t readBuffer[256U];
+
+	memcpy(readBuffer, (const void*) address, numberOfBytes);
+
+	HAL_UART_Transmit(UART_PORT, readBuffer, numberOfBytes, HAL_MAX_DELAY);
 }
 
 void handleGoToAddress(void) {
@@ -208,11 +270,17 @@ void handleGoToAddress(void) {
 		return;
 	}
 
-	uint8_t addressIsValid = verifyAddress(address);
+	if (!verifyGoAddress(address)) {
+#ifdef DEBUG_PRINT
+		printf(
+				"Go To Address rejected. "
+						"Expected application vector table: 0x%08lX, Received: 0x%08lX\r\n",
+				APPLICATION_START_ADDRESS, address);
+#endif
 
-	if (!addressIsValid) {
 		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+
+		HAL_UART_Transmit(UART_PORT, response, sizeof(response),HAL_MAX_DELAY);
 		return;
 	}
 
@@ -323,15 +391,15 @@ void handleWriteMemory(void) {
 	}
 
 	/*
-	 * This is currently a basic address check.
+	 * Validate the complete image range before receiving any
+	 * firmware data blocks.
 	 *
-	 * A complete address-and-length range validation will be added
-	 * in the dedicated memory protection step.
+	 * The complete image must remain inside the application area.
 	 */
-	if (!verifyAddress(address)) {
+	if (!verifyWriteRange(address, totalLength)) {
 #ifdef DEBUG_PRINT
-		printf("Write Memory rejected: invalid start address 0x%08lX.\r\n",
-				address);
+		printf("Write Memory range rejected. "
+				"Address: 0x%08lX, Length: %lu\r\n", address, totalLength);
 #endif
 
 		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
@@ -356,7 +424,8 @@ void handleWriteMemory(void) {
 	 */
 	response = ACK;
 
-	if (HAL_UART_Transmit(UART_PORT, &response, 1U, WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
+	if (HAL_UART_Transmit(UART_PORT, &response, 1U, WRITE_COMMAND_TIMEOUT_MS)
+			!= HAL_OK) {
 		return;
 	}
 
@@ -373,7 +442,8 @@ void handleWriteMemory(void) {
 		 * N = 0   -> 1 byte
 		 * N = 255 -> 256 bytes
 		 */
-		if (HAL_UART_Receive(UART_PORT, &n, 1U, WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
+		if (HAL_UART_Receive(UART_PORT, &n, 1U, WRITE_BLOCK_TIMEOUT_MS)
+				!= HAL_OK) {
 #ifdef DEBUG_PRINT
 			printf("Timeout or UART error while waiting for block length.\r\n");
 #endif
@@ -412,7 +482,8 @@ void handleWriteMemory(void) {
 		 */
 		uint8_t blockBuffer[257U] = { 0 };
 
-		if (HAL_UART_Receive(UART_PORT, blockBuffer, blockLength + 1U, WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
+		if (HAL_UART_Receive(UART_PORT, blockBuffer, blockLength + 1U,
+		WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
 #ifdef DEBUG_PRINT
 			printf("Timeout or UART error while receiving firmware block.\r\n");
 #endif
@@ -459,7 +530,7 @@ void handleWriteMemory(void) {
 
 			response = NACK;
 
-			HAL_UART_Transmit(UART_PORT, &response, 1U,HAL_MAX_DELAY);
+			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 			return;
 		}
 
@@ -482,7 +553,8 @@ void handleWriteMemory(void) {
 			response = ACK;
 		}
 
-		if (HAL_UART_Transmit(UART_PORT, &response, 1U, WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
+		if (HAL_UART_Transmit(UART_PORT, &response, 1U,
+		WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
 			return;
 		}
 	}
@@ -680,7 +752,8 @@ void handleWriteProtectUnprotect(void) {
 
 		if (HAL_FLASHEx_OBProgram(&obInit) != HAL_OK) {
 			response[0] = NACK;
-			HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
+			HAL_MAX_DELAY);
 			HAL_FLASH_OB_Lock();
 		}
 	}
@@ -914,34 +987,139 @@ void handleReadoutProtectUnprotect(void) {
 	HAL_NVIC_SystemReset();
 }
 
-HAL_StatusTypeDef flashWrite(uint32_t address, uint8_t *data,
+HAL_StatusTypeDef flashWrite(uint32_t address, const uint8_t *data,
 		uint32_t dataLength) {
 
-	HAL_FLASH_Unlock();
-	for (uint32_t i = 0; i < dataLength; i++) {
+	/*
+	 * Reject invalid pointers and zero-length operations.
+	 */
+	if ((data == NULL) || (dataLength == 0U)) {
+		return HAL_ERROR;
+	}
+
+	/*
+	 * Perform a second range validation inside the low-level
+	 * Flash programming function.
+	 *
+	 * This prevents a future caller from bypassing the validation
+	 * performed by handleWriteMemory().
+	 */
+	if (!verifyWriteRange(address, dataLength)) {
+		return HAL_ERROR;
+	}
+
+	if (HAL_FLASH_Unlock() != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+	for (uint32_t i = 0U; i < dataLength; i++) {
 		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, address + i, data[i])
 				!= HAL_OK) {
 			HAL_FLASH_Lock();
 			return HAL_ERROR;
 		}
 	}
+
 	HAL_FLASH_Lock();
 
 	return HAL_OK;
 
 }
-
-uint8_t verifyAddress(uint32_t address) {
-
-	if ((address >= FLASH_BASE && address <= FLASH_END)
-			|| (address >= SRAM1_BASE && address <= SRAM1_END)
-			|| (address >= SRAM2_BASE && address <= SRAM2_END)
-			|| (address >= BKPSRAM_BASE && address <= BKPSRAM_END)) {
-
-		return 1;
+uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length,
+		uint32_t regionStart, uint32_t regionEnd) {
+	/*
+	 * Zero-length memory operations are not valid.
+	 */
+	if (length == 0U) {
+		return 0U;
 	}
-	return 0;
 
+	/*
+	 * Validate the starting address before performing
+	 * any arithmetic with the requested length.
+	 */
+	if ((address < regionStart) || (address > regionEnd)) {
+		return 0U;
+	}
+
+	/*
+	 * Avoid calculating:
+	 *
+	 * address + length - 1
+	 *
+	 * directly because that expression may overflow uint32_t.
+	 *
+	 * The range is valid when the requested length minus one
+	 * fits inside the number of bytes remaining in the region.
+	 */
+	if ((length - 1U) > (regionEnd - address)) {
+		return 0U;
+	}
+
+	return 1U;
+}
+
+uint8_t verifyReadRange(uint32_t address, uint32_t length) {
+	/*
+	 * Reading is permitted from internal Flash memory.
+	 */
+	if (isRangeInsideMemoryRegion(address, length, FLASH_MEMORY_START_ADDRESS,
+	FLASH_MEMORY_END_ADDRESS)) {
+		return 1U;
+	}
+
+	/*
+	 * SRAM1 and SRAM2 form one contiguous address range
+	 * on the STM32F446RE.
+	 */
+	if (isRangeInsideMemoryRegion(address, length, SRAM_MEMORY_START_ADDRESS,
+	SRAM_MEMORY_END_ADDRESS)) {
+		return 1U;
+	}
+
+	/*
+	 * Backup SRAM is validated as a separate memory region.
+	 */
+	if (isRangeInsideMemoryRegion(address, length, BACKUP_SRAM_START_ADDRESS,
+	BACKUP_SRAM_END_ADDRESS)) {
+		return 1U;
+	}
+
+	return 0U;
+}
+
+uint8_t verifyWriteRange(uint32_t address, uint32_t length) {
+	/*
+	 * Firmware programming is restricted to the application area.
+	 *
+	 * Sector 0 and Sector 1 contain the bootloader and must never
+	 * be modified through the Write Memory command.
+	 */
+	return isRangeInsideMemoryRegion(address, length, APPLICATION_START_ADDRESS,
+	APPLICATION_END_ADDRESS);
+}
+
+uint8_t verifyGoAddress(uint32_t address) {
+	/*
+	 * The current project uses a single application image whose
+	 * vector table starts at APPLICATION_START_ADDRESS.
+	 *
+	 * Arbitrary function addresses are intentionally rejected.
+	 */
+	if (address != APPLICATION_START_ADDRESS) {
+		return 0U;
+	}
+
+	/*
+	 * A vector table must be word-aligned and must contain at
+	 * least the initial stack pointer and reset handler entries.
+	 */
+	if ((address & 0x03U) != 0U) {
+		return 0U;
+	}
+
+	return isRangeInsideMemoryRegion(address, 8U, APPLICATION_START_ADDRESS,
+	APPLICATION_END_ADDRESS);
 }
 
 void handleResetOperation(void) {
