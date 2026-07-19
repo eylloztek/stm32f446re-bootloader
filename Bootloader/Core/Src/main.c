@@ -64,7 +64,6 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 int _write(int file, char *ptr, int len);
-void JumpToApplication(void);
 void uartSend(char *message);
 /* USER CODE END PFP */
 
@@ -77,15 +76,6 @@ int _write(int file, char *ptr, int len) {
 		ITM_SendChar((*ptr++));
 	}
 	return len;
-}
-
-void JumpToApplication(void) {
-	__set_MSP(APP_STACK_POINTER);
-	void (*AppResetHandler)(void);
-
-	AppResetHandler = (void (*)(void)) APP_RESET_HANDLER;
-	AppResetHandler();
-
 }
 
 void uartSend(char *message) {
@@ -134,13 +124,42 @@ int main(void) {
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-		if (!HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin)) {
-			uartSend(message);
+		if (HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin) == GPIO_PIN_RESET) {
+
+			HAL_Delay(20U);
+
+			if (HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin)
+					== GPIO_PIN_RESET) {
+				uint32_t initialStackPointer = 0U;
+				uint32_t resetHandlerAddress = 0U;
+
+				if (validateApplicationVectorTable(APPLICATION_START_ADDRESS,
+						&initialStackPointer, &resetHandlerAddress)) {
+					uartSend(message);
 
 #ifdef DEBUG_PRINT
-			printf("Going to Application...\r\n");
+					printf("Going to Application...\r\n");
 #endif
-			JumpToApplication();
+
+					(void) JumpToApplication(APPLICATION_START_ADDRESS);
+				} else {
+					uartSend("No valid application image was found.\r\n");
+
+#ifdef DEBUG_PRINT
+					printf("Application jump rejected: "
+							"invalid vector table.\r\n");
+#endif
+				}
+
+				/*
+				 * Wait for the button to be released so that an invalid
+				 * application does not cause repeated messages.
+				 */
+				while (HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin)
+						== GPIO_PIN_RESET) {
+					HAL_Delay(10U);
+				}
+			}
 		}
 		if (commandReady) {
 			commandReady = 0;

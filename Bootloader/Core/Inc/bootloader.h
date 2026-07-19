@@ -74,6 +74,16 @@
 #define BACKUP_SRAM_START_ADDRESS       0x40024000UL
 #define BACKUP_SRAM_END_ADDRESS         0x40024FFFUL
 
+/*
+ * The initial stack pointer may point one byte beyond the last
+ * SRAM address because stacks grow downward.
+ */
+#define SRAM_STACK_TOP_ADDRESS          \
+    (SRAM_MEMORY_END_ADDRESS + 1UL)
+
+#define APPLICATION_VECTOR_ALIGNMENT    0x80UL
+#define APPLICATION_VECTOR_ENTRY_SIZE   8UL
+
 void processBootloaderCommand(void);
 void handleGetVersion(void);
 void handleGetHelp(void);
@@ -89,9 +99,13 @@ void handleReadoutProtectUnprotect(void);
 void handleResetOperation(void);
 void handleUnknownCommand(void);
 uint8_t calculateCRC(char *data, uint16_t startIndex, uint16_t length);
-uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length, uint32_t regionStart, uint32_t regionEnd);
+uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length,
+		uint32_t regionStart, uint32_t regionEnd);
 uint8_t verifyReadRange(uint32_t address, uint32_t length);
 uint8_t verifyWriteRange(uint32_t address, uint32_t length);
 uint8_t verifyGoAddress(uint32_t address);
+uint8_t validateApplicationVectorTable(uint32_t applicationAddress,
+		uint32_t *initialStackPointer, uint32_t *resetHandlerAddress);
+HAL_StatusTypeDef JumpToApplication(uint32_t applicationAddress);
 
 #endif /* INC_BOOTLOADER_H_ */

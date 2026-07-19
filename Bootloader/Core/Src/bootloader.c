@@ -252,50 +252,112 @@ void handleReadMemory(void) {
 }
 
 void handleGoToAddress(void) {
-	uint8_t response[1] = { 0 };
-	uint8_t offset = 3;
+	uint8_t response = NACK;
+	const uint8_t offset = 3U;
+	const uint8_t expectedCommandLength = 6U;
 
-	uint32_t address = (messageBuffer[offset] << 24)
-			| (messageBuffer[offset + 1] << 16)
-			| (messageBuffer[offset + 2] << 8) | (messageBuffer[offset + 3]);
-
-	uint8_t addressChecksum = messageBuffer[offset + 4];
-	uint8_t calculatedChecksum = (messageBuffer[offset])
-			^ (messageBuffer[offset + 1]) ^ (messageBuffer[offset + 2])
-			^ (messageBuffer[offset + 3]);
-
-	if (addressChecksum != calculatedChecksum) {
-		response[0] = NACK;
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
-		return;
-	}
-
-	if (!verifyGoAddress(address)) {
+	/*
+	 * The command length contains:
+	 *
+	 * Command byte     : 1 byte
+	 * Address          : 4 bytes
+	 * Address checksum : 1 byte
+	 *
+	 * Total            : 6 bytes
+	 */
+	if ((uint8_t) messageBuffer[1] != expectedCommandLength) {
 #ifdef DEBUG_PRINT
-		printf(
-				"Go To Address rejected. "
-						"Expected application vector table: 0x%08lX, Received: 0x%08lX\r\n",
-				APPLICATION_START_ADDRESS, address);
+		printf("Invalid Go To Address command length: %u\r\n",
+				(uint8_t) messageBuffer[1]);
 #endif
 
-		response[0] = NACK;
-
-		HAL_UART_Transmit(UART_PORT, response, sizeof(response),HAL_MAX_DELAY);
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
 		return;
 	}
 
-	response[0] = ACK;
-	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+	/*
+	 * Validate the complete command packet checksum.
+	 */
+	uint16_t packetChecksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
 
-	typedef void (*Function_Pointer)(void);
-	uint32_t sp = *((volatile uint32_t*) address);
-	uint32_t pc = *((volatile uint32_t*) (address + 4));
+	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
+			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
 
-	__set_MSP(sp);
+	uint8_t receivedPacketChecksum =
+			(uint8_t) messageBuffer[packetChecksumIndex];
 
-	Function_Pointer app_start = (Function_Pointer) pc;
-	app_start();
+	if (calculatedPacketChecksum != receivedPacketChecksum) {
+#ifdef DEBUG_PRINT
+		printf("Go To Address packet checksum error. "
+				"Calculated: 0x%02X, Received: 0x%02X\r\n",
+				calculatedPacketChecksum, receivedPacketChecksum);
+#endif
 
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
+			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
+			| ((uint32_t) (uint8_t) messageBuffer[offset + 2U] << 8U)
+			| ((uint32_t) (uint8_t) messageBuffer[offset + 3U]);
+
+	uint8_t receivedAddressChecksum = (uint8_t) messageBuffer[offset + 4U];
+
+	uint8_t calculatedAddressChecksum = (uint8_t) messageBuffer[offset]
+			^ (uint8_t) messageBuffer[offset + 1U]
+			^ (uint8_t) messageBuffer[offset + 2U]
+			^ (uint8_t) messageBuffer[offset + 3U];
+
+	if (receivedAddressChecksum != calculatedAddressChecksum) {
+#ifdef DEBUG_PRINT
+		printf("Go To Address address checksum error. "
+				"Calculated: 0x%02X, Received: 0x%02X\r\n",
+				calculatedAddressChecksum, receivedAddressChecksum);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	uint32_t initialStackPointer = 0U;
+	uint32_t resetHandlerAddress = 0U;
+
+	/*
+	 * Validate the complete application vector table before
+	 * acknowledging the command.
+	 */
+	if (!validateApplicationVectorTable(address, &initialStackPointer,
+			&resetHandlerAddress)) {
+#ifdef DEBUG_PRINT
+		printf("Go To Address rejected: invalid application image "
+				"at 0x%08lX.\r\n", address);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
+
+	response = ACK;
+
+	if (HAL_UART_Transmit(UART_PORT, &response, 1U, 1000U) != HAL_OK) {
+		return;
+	}
+
+	/*
+	 * Ensure that ACK has completely left the UART peripheral
+	 * before the UART is deinitialized.
+	 */
+	while (__HAL_UART_GET_FLAG(
+			UART_PORT,
+			UART_FLAG_TC) == RESET) {
+		/* Wait for transmission completion. */
+	}
+
+	/*
+	 * This call does not return when the application is valid.
+	 */
+	(void) JumpToApplication(address);
 }
 
 void handleWriteMemory(void) {
@@ -1122,6 +1184,96 @@ uint8_t verifyGoAddress(uint32_t address) {
 	APPLICATION_END_ADDRESS);
 }
 
+uint8_t validateApplicationVectorTable(uint32_t applicationAddress,
+		uint32_t *initialStackPointer, uint32_t *resetHandlerAddress) {
+	if ((initialStackPointer == NULL) || (resetHandlerAddress == NULL)) {
+		return 0U;
+	}
+
+	/*
+	 * The current project supports a single application image
+	 * located at APPLICATION_START_ADDRESS.
+	 */
+	if (!verifyGoAddress(applicationAddress)) {
+		return 0U;
+	}
+
+	/*
+	 * The Cortex-M4 vector table must satisfy the VTOR
+	 * alignment requirement.
+	 */
+	if ((applicationAddress & (APPLICATION_VECTOR_ALIGNMENT - 1UL)) != 0U) {
+		return 0U;
+	}
+
+	/*
+	 * The vector table must contain at least:
+	 *
+	 * Entry 0: Initial stack pointer
+	 * Entry 1: Reset handler address
+	 */
+	if (!isRangeInsideMemoryRegion(applicationAddress,
+	APPLICATION_VECTOR_ENTRY_SIZE, APPLICATION_START_ADDRESS,
+	APPLICATION_END_ADDRESS)) {
+		return 0U;
+	}
+
+	uint32_t stackPointer = *((volatile uint32_t*) applicationAddress);
+
+	uint32_t resetHandler = *((volatile uint32_t*) (applicationAddress + 4UL));
+
+	/*
+	 * Erased Flash normally contains 0xFFFFFFFF.
+	 */
+	if ((stackPointer == 0xFFFFFFFFUL) || (resetHandler == 0xFFFFFFFFUL)
+			|| (stackPointer == 0UL) || (resetHandler == 0UL)) {
+		return 0U;
+	}
+
+	/*
+	 * The initial stack pointer must be located inside SRAM.
+	 *
+	 * SRAM_STACK_TOP_ADDRESS is accepted because the initial
+	 * stack pointer normally starts at the first address above
+	 * the allocated SRAM region.
+	 */
+	if ((stackPointer < SRAM_MEMORY_START_ADDRESS)
+			|| (stackPointer > SRAM_STACK_TOP_ADDRESS)) {
+		return 0U;
+	}
+
+	/*
+	 * The ARM procedure call standard requires an 8-byte aligned
+	 * stack at public interfaces.
+	 */
+	if ((stackPointer & 0x07UL) != 0UL) {
+		return 0U;
+	}
+
+	/*
+	 * Cortex-M function addresses must have the Thumb bit set.
+	 */
+	if ((resetHandler & 0x01UL) == 0UL) {
+		return 0U;
+	}
+
+	/*
+	 * Remove the Thumb bit before validating the physical
+	 * Reset Handler address.
+	 */
+	uint32_t resetHandlerCodeAddress = resetHandler & ~0x01UL;
+
+	if (!isRangeInsideMemoryRegion(resetHandlerCodeAddress, 2UL,
+	APPLICATION_START_ADDRESS, APPLICATION_END_ADDRESS)) {
+		return 0U;
+	}
+
+	*initialStackPointer = stackPointer;
+	*resetHandlerAddress = resetHandler;
+
+	return 1U;
+}
+
 void handleResetOperation(void) {
 	counterTest++;
 	HAL_NVIC_SystemReset();
@@ -1141,4 +1293,118 @@ void handleUnknownCommand(void) {
 
 	response[0] = UNKNOWN;
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+}
+
+typedef void (*ApplicationEntryPoint_t)(void);
+
+HAL_StatusTypeDef JumpToApplication(uint32_t applicationAddress) {
+	uint32_t initialStackPointer = 0U;
+	uint32_t resetHandlerAddress = 0U;
+
+	if (!validateApplicationVectorTable(applicationAddress,
+			&initialStackPointer, &resetHandlerAddress)) {
+#ifdef DEBUG_PRINT
+		printf("Application validation failed at address 0x%08lX.\r\n",
+				applicationAddress);
+#endif
+
+		return HAL_ERROR;
+	}
+
+	ApplicationEntryPoint_t applicationEntryPoint =
+			(ApplicationEntryPoint_t) resetHandlerAddress;
+
+#ifdef DEBUG_PRINT
+	printf("Application validation successful.\r\n"
+			"Initial MSP: 0x%08lX\r\n"
+			"Reset Handler: 0x%08lX\r\n", initialStackPointer,
+			resetHandlerAddress);
+#endif
+
+	/*
+	 * Stop the interrupt-based UART reception before disabling
+	 * interrupts globally.
+	 */
+	(void) HAL_UART_AbortReceive_IT(UART_PORT);
+
+	/*
+	 * Wait until any pending UART transmission has completely
+	 * left the shift register.
+	 */
+	while (__HAL_UART_GET_FLAG(
+			UART_PORT,
+			UART_FLAG_TC) == RESET) {
+		/* Wait for UART transmission completion. */
+	}
+
+	/*
+	 * Prevent interrupts from running while the bootloader
+	 * execution environment is being removed.
+	 */
+	__disable_irq();
+
+	/*
+	 * Stop the SysTick timer inherited from the bootloader.
+	 */
+	SysTick->CTRL = 0U;
+	SysTick->LOAD = 0U;
+	SysTick->VAL = 0U;
+
+	/*
+	 * Disable all external interrupts and clear all pending
+	 * external interrupt requests.
+	 */
+	for (uint32_t index = 0U;
+			index < (sizeof(NVIC->ICER) / sizeof(NVIC->ICER[0])); index++) {
+		NVIC->ICER[index] = 0xFFFFFFFFUL;
+		NVIC->ICPR[index] = 0xFFFFFFFFUL;
+	}
+
+	/*
+	 * Deinitialize peripherals and restore the clock tree to
+	 * its reset-compatible state.
+	 */
+	(void) HAL_UART_DeInit(UART_PORT);
+	(void) HAL_RCC_DeInit();
+	(void) HAL_DeInit();
+
+	/*
+	 * Select the application vector table before interrupts
+	 * are enabled again.
+	 */
+	SCB->VTOR = applicationAddress;
+
+	__DSB();
+	__ISB();
+
+	/*
+	 * Ensure that the application starts in privileged Thread
+	 * mode using the Main Stack Pointer.
+	 */
+	__set_CONTROL(0U);
+	__set_PSP(0U);
+
+	__DSB();
+	__ISB();
+
+	/*
+	 * All NVIC interrupts are disabled and pending requests have
+	 * been cleared, so interrupts can safely be enabled before
+	 * loading the application MSP.
+	 */
+	__enable_irq();
+
+	/*
+	 * No normal C function should be called after changing MSP.
+	 * Branch directly to the application Reset Handler.
+	 */
+	__set_MSP(initialStackPointer);
+
+	applicationEntryPoint();
+
+	/*
+	 * A valid Reset Handler must never return.
+	 */
+	while (1) {
+	}
 }
