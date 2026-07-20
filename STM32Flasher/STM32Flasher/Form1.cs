@@ -296,6 +296,23 @@ namespace STM32Flasher
             );
         }
 
+        private static byte[] CreateGoToAddressPayload(uint address)
+        {
+            byte[] payload = new byte[5];
+
+            /*
+             * Address in big-endian format.
+             */
+            payload[0] = (byte)((address >> 24) & 0xFFU);
+            payload[1] = (byte)((address >> 16) & 0xFFU);
+            payload[2] = (byte)((address >> 8) & 0xFFU);
+            payload[3] = (byte)(address & 0xFFU);
+
+            payload[4] = (byte)(payload[0] ^ payload[1] ^ payload[2] ^ payload[3]);
+
+            return payload;
+        }
+
         public STM32Flasher()
         {
             InitializeComponent();
@@ -1361,10 +1378,106 @@ namespace STM32Flasher
             SendBootLoaderCommand(cmd, new byte[0]);
         }
 
-        private void btnExitBoot_Click(object sender, EventArgs e)
+        private async void btnExitBoot_Click(object sender, EventArgs e)
         {
-            uint defaultAddress = 0x08008000;
-            sendGoAddressData(defaultAddress);
+            if (!serialPort1.IsOpen)
+            {
+                MessageBox.Show(
+                    "Serial port is not open.",
+                    "Connection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            byte command = (byte)BootloaderCommand.Go;
+
+            byte[] payload = CreateGoToAddressPayload(ApplicationStartAddress);
+
+            btnExitBoot.Enabled = false;
+
+            try
+            {
+                byte? response = await SendCommandAndWaitForStatusAsync(command, payload, 3000);
+
+                if (!response.HasValue)
+                {
+                    MessageBox.Show(
+                        "The bootloader did not respond to the application jump request.",
+                        "Application Jump Timeout",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                if (response.Value == BootloaderNack)
+                {
+                    MessageBox.Show(
+                        "The application jump was rejected.\n\n" +
+                        "The application vector table, initial stack pointer, " +
+                        "or Reset Handler is invalid.",
+                        "Invalid Application Image",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+
+                    return;
+                }
+
+                if (response.Value != BootloaderAck)
+                {
+                    MessageBox.Show(
+                        $"Unexpected bootloader response: 0x{response.Value:X2}",
+                        "Protocol Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                /*
+                 * The serial port remains open because the application
+                 * also uses the same UART. Bootloader command controls
+                 * are disabled after the successful jump.
+                 */
+                grpBoxCommands.Enabled = false;
+                btnExitBoot.Enabled = false;
+                btnReset.Enabled = false;
+
+                lblConnectionStatus.Text = "Application Mode";
+
+                MessageBox.Show(
+                    "The application jump was accepted.",
+                    "Application Started",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "Application Jump Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            finally
+            {
+                /*
+                 * Re-enable the button only when the application jump
+                 * was not accepted.
+                 */
+                if (lblConnectionStatus.Text != "Application Mode")
+                {
+                    btnExitBoot.Enabled = true;
+                }
+            }
         }
 
         private void btnRefresh_Click(object sender, EventArgs e)
