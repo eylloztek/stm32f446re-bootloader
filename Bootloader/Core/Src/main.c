@@ -28,7 +28,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef enum {
+	BOOTLOADER_PARSER_WAIT_HEADER = 0,
+	BOOTLOADER_PARSER_WAIT_LENGTH,
+	BOOTLOADER_PARSER_WAIT_FRAME
+} BootloaderParserState_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -50,11 +54,20 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 
 char message[] = "Going to Application...\r\n";
-uint8_t rxChar;
-char messageBuffer[BUFFER_SIZE];
-uint8_t bufferIndex;
-uint8_t counterTest = 0;
-volatile uint8_t commandReady = 0;
+uint8_t rxChar = 0U;
+uint8_t messageBuffer[BOOTLOADER_RX_BUFFER_SIZE] = { 0 };
+
+volatile uint16_t bufferIndex = 0U;
+volatile uint16_t expectedPacketLength = 0U;
+
+volatile uint8_t commandReady = 0U;
+volatile uint8_t parserErrorReady = 0U;
+
+volatile uint32_t lastReceivedByteTick = 0U;
+
+volatile BootloaderParserState_t parserState = BOOTLOADER_PARSER_WAIT_HEADER;
+
+uint8_t counterTest = 0U;
 
 /* USER CODE END PV */
 
@@ -64,7 +77,10 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 int _write(int file, char *ptr, int len);
-void uartSend(char *message);
+static void BootloaderParser_Reset(void);
+static HAL_StatusTypeDef BootloaderUart_StartReception(void);
+static void BootloaderParser_CheckTimeout(void);
+void uartSend(const char *message);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -78,8 +94,59 @@ int _write(int file, char *ptr, int len) {
 	return len;
 }
 
-void uartSend(char *message) {
-	HAL_UART_Transmit(UART_PORT, (uint8_t*) message, strlen(message),
+static void BootloaderParser_Reset(void) {
+	bufferIndex = 0U;
+	expectedPacketLength = 0U;
+
+	parserState = BOOTLOADER_PARSER_WAIT_HEADER;
+}
+
+static HAL_StatusTypeDef BootloaderUart_StartReception(void) {
+	return HAL_UART_Receive_IT(UART_PORT, &rxChar, 1U);
+}
+
+static void BootloaderParser_CheckTimeout(void) {
+	/*
+	 * No timeout check is required while waiting for a new header
+	 * or while a complete command is waiting to be processed.
+	 */
+	if ((parserState == BOOTLOADER_PARSER_WAIT_HEADER)
+			|| (commandReady != 0U)) {
+		return;
+	}
+
+	uint32_t elapsedTime = HAL_GetTick() - lastReceivedByteTick;
+
+	if (elapsedTime <= BOOTLOADER_FRAME_TIMEOUT_MS) {
+		return;
+	}
+
+#ifdef DEBUG_PRINT
+	printf("UART command frame timeout. "
+			"Received bytes: %u, Expected bytes: %u\r\n",
+			(unsigned int) bufferIndex, (unsigned int) expectedPacketLength);
+#endif
+
+	/*
+	 * Abort the incomplete interrupt-based reception before
+	 * starting a new command frame.
+	 */
+	(void) HAL_UART_AbortReceive(UART_PORT);
+
+	BootloaderParser_Reset();
+
+	parserErrorReady = 1U;
+
+	(void) BootloaderUart_StartReception();
+}
+
+void uartSend(const char *message) {
+
+	if (message == NULL) {
+		return;
+	}
+
+	HAL_UART_Transmit(UART_PORT, (const uint8_t*) message, strlen(message),
 	HAL_MAX_DELAY);
 }
 
@@ -115,7 +182,11 @@ int main(void) {
 	MX_GPIO_Init();
 	MX_USART2_UART_Init();
 	/* USER CODE BEGIN 2 */
-	HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
+	BootloaderParser_Reset();
+
+	if (BootloaderUart_StartReception() != HAL_OK) {
+		Error_Handler();
+	}
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -161,11 +232,40 @@ int main(void) {
 				}
 			}
 		}
-		if (commandReady) {
-			commandReady = 0;
-			processBootloaderCommand();
+		BootloaderParser_CheckTimeout();
 
-			HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
+		if (parserErrorReady != 0U) {
+			uint8_t response = NACK;
+
+			parserErrorReady = 0U;
+
+			HAL_UART_Transmit(UART_PORT, &response, 1U, 1000U);
+		}
+
+		if (commandReady != 0U) {
+			/*
+			 * Reception is not rearmed after a complete packet, so the
+			 * packet length and buffer remain stable during processing.
+			 */
+			uint16_t packetLength = bufferIndex;
+
+			commandReady = 0U;
+
+			processBootloaderCommand(packetLength);
+
+			/*
+			 * A successful Go command or option-byte operation may not
+			 * return from processBootloaderCommand().
+			 */
+			BootloaderParser_Reset();
+
+			if (BootloaderUart_StartReception() != HAL_OK) {
+#ifdef DEBUG_PRINT
+				printf("UART command reception could not be restarted.\r\n");
+#endif
+
+				parserErrorReady = 1U;
+			}
 		}
 	}
 	/* USER CODE END 3 */
@@ -284,23 +384,146 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-	if (huart->Instance == USART2) {
-		if (bufferIndex < BUFFER_SIZE - 1) {
-			messageBuffer[bufferIndex++] = rxChar;
-			messageBuffer[bufferIndex] = '\0';
-		} else {
-			bufferIndex = 0;
-			memset(messageBuffer, 0, BUFFER_SIZE);
-		}
-
-		if (bufferIndex >= 2 && messageBuffer[bufferIndex - 2] == '\r'
-				&& messageBuffer[bufferIndex - 1] == '\n') {
-			commandReady = 1;
-			return;
-		}
-
-		HAL_UART_Receive_IT(UART_PORT, &rxChar, 1);
+	if ((huart == NULL) || (huart->Instance != USART2)) {
+		return;
 	}
+
+	lastReceivedByteTick = HAL_GetTick();
+
+	switch (parserState) {
+		case BOOTLOADER_PARSER_WAIT_HEADER: {
+			/*
+			 * Ignore all bytes until a valid bootloader header
+			 * is received.
+			 */
+			if (rxChar == BOOTLOADER_HEADER) {
+				messageBuffer[0] = rxChar;
+				bufferIndex = 1U;
+
+				parserState = BOOTLOADER_PARSER_WAIT_LENGTH;
+			}
+
+			break;
+		}
+
+		case BOOTLOADER_PARSER_WAIT_LENGTH: {
+			/*
+			 * The length field contains:
+			 *
+			 * Command byte + payload bytes
+			 */
+			if ((rxChar < BOOTLOADER_MIN_COMMAND_LENGTH)
+					|| (rxChar > BOOTLOADER_MAX_COMMAND_LENGTH)) {
+#ifdef DEBUG_PRINT
+			printf("Invalid command length received: %u\r\n", rxChar);
+#endif
+
+				parserErrorReady = 1U;
+
+				BootloaderParser_Reset();
+				break;
+			}
+
+			messageBuffer[1] = rxChar;
+			bufferIndex = 2U;
+
+			/*
+			 * Complete frame:
+			 *
+			 * Header + Length + Body + Checksum
+			 */
+			expectedPacketLength = (uint16_t) rxChar + 3U;
+
+			parserState = BOOTLOADER_PARSER_WAIT_FRAME;
+
+			break;
+		}
+
+		case BOOTLOADER_PARSER_WAIT_FRAME: {
+			if (bufferIndex >= BOOTLOADER_RX_BUFFER_SIZE) {
+#ifdef DEBUG_PRINT
+			printf("UART command buffer overflow rejected.\r\n");
+#endif
+
+				parserErrorReady = 1U;
+
+				BootloaderParser_Reset();
+				break;
+			}
+
+			messageBuffer[bufferIndex] = rxChar;
+
+			bufferIndex++;
+
+			if (bufferIndex == expectedPacketLength) {
+				/*
+				 * Stop rearming UART reception until the main loop
+				 * has processed the complete command frame.
+				 */
+				commandReady = 1U;
+				return;
+			}
+
+		if (bufferIndex > expectedPacketLength) {
+#ifdef DEBUG_PRINT
+			printf("UART command frame exceeded expected length.\r\n");
+#endif
+
+				parserErrorReady = 1U;
+
+				BootloaderParser_Reset();
+			}
+
+			break;
+		}
+
+		default: {
+			parserErrorReady = 1U;
+
+			BootloaderParser_Reset();
+			break;
+		}
+	}
+
+	if (commandReady == 0U) {
+		if (BootloaderUart_StartReception() != HAL_OK) {
+			parserErrorReady = 1U;
+		}
+	}
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+    if ((huart == NULL) || (huart->Instance != USART2)){
+        return;
+    }
+
+#ifdef DEBUG_PRINT
+    printf(
+        "UART receive error: 0x%08lX\r\n",
+        huart->ErrorCode);
+#endif
+
+    parserErrorReady = 1U;
+
+    /*
+     * Abort the active interrupt reception. Reception is restarted
+     * from HAL_UART_AbortReceiveCpltCallback().
+     */
+    if (HAL_UART_AbortReceive_IT(huart) != HAL_OK){
+        BootloaderParser_Reset();
+
+        (void)BootloaderUart_StartReception();
+    }
+}
+
+void HAL_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart) {
+    if ((huart == NULL) || (huart->Instance != USART2)) {
+        return;
+    }
+
+    BootloaderParser_Reset();
+
+    (void)BootloaderUart_StartReception();
 }
 /* USER CODE END 4 */
 

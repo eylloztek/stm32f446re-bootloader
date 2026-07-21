@@ -8,11 +8,129 @@
 #include "bootloader.h"
 #include "stdio.h"
 
-extern char messageBuffer[BUFFER_SIZE];
-extern uint8_t bufferIndex;
+extern uint8_t messageBuffer[BOOTLOADER_RX_BUFFER_SIZE];
 extern uint8_t counterTest;
 
-void processBootloaderCommand(void) {
+static uint8_t validateBootloaderPacket(uint16_t packetLength);
+static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength);
+
+static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength) {
+	switch (command) {
+	case GET_HELP:
+	case GET_VERSION:
+	case GET_ID:
+	case RESET: {
+		return commandLength == 1U;
+	}
+
+	case READ_MEMORY: {
+		return commandLength == 8U;
+	}
+
+	case GO_TO_ADDRESS: {
+		return commandLength == 6U;
+	}
+
+	case WRITE_MEMORY: {
+		return commandLength == 10U;
+	}
+
+	case ERASE: {
+		/*
+		 * Command + N + 1-6 sectors + inner checksum
+		 */
+		return (commandLength >= 4U) && (commandLength <= 9U);
+	}
+
+	case WRITE_PROTECT_UNPROTECT: {
+		/*
+		 * Current protocol supports either:
+		 *
+		 * Command + unprotect marker
+		 *
+		 * or:
+		 *
+		 * Command + N + 1-6 sector identifiers
+		 */
+		return (commandLength >= 2U) && (commandLength <= 8U);
+	}
+
+	case READOUT_PROTECT_UNPROTECT: {
+		return commandLength == 2U;
+	}
+
+	default: {
+		/*
+		 * Unknown commands are allowed through framing
+		 * validation so that handleUnknownCommand() can
+		 * return the protocol's normal unknown response.
+		 */
+		return 1U;
+	}
+	}
+}
+
+static uint8_t validateBootloaderPacket(uint16_t packetLength) {
+	if ((packetLength < 4U) || (packetLength > BOOTLOADER_RX_BUFFER_SIZE)) {
+		return 0U;
+	}
+
+	if (messageBuffer[0] != BOOTLOADER_HEADER) {
+		return 0U;
+	}
+
+	uint8_t commandLength = messageBuffer[1];
+
+	if ((commandLength < BOOTLOADER_MIN_COMMAND_LENGTH)
+			|| (commandLength > BOOTLOADER_MAX_COMMAND_LENGTH)) {
+		return 0U;
+	}
+
+	uint16_t expectedLength = (uint16_t) commandLength + 3U;
+
+	if (packetLength != expectedLength) {
+		return 0U;
+	}
+
+	uint8_t command = messageBuffer[2];
+
+	if (!validateCommandLength(command, commandLength)) {
+		return 0U;
+	}
+
+	uint16_t checksumIndex = 2U + (uint16_t) commandLength;
+
+	uint8_t calculatedChecksum = calculateCRC(messageBuffer, 1U,
+			(uint16_t) commandLength + 1U);
+
+	uint8_t receivedChecksum = messageBuffer[checksumIndex];
+
+	if (calculatedChecksum != receivedChecksum) {
+#ifdef DEBUG_PRINT
+		printf("Command checksum error. "
+				"Calculated: 0x%02X, Received: 0x%02X\r\n", calculatedChecksum,
+				receivedChecksum);
+#endif
+
+		return 0U;
+	}
+
+	return 1U;
+}
+
+void processBootloaderCommand(uint16_t packetLength) {
+
+	if (!validateBootloaderPacket(packetLength)) {
+		uint8_t response = NACK;
+
+#ifdef DEBUG_PRINT
+		printf("Invalid bootloader command frame rejected. "
+				"Packet length: %u\r\n", packetLength);
+#endif
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+		return;
+	}
 	uint8_t command = messageBuffer[2];
 
 	switch (command) {
@@ -51,8 +169,6 @@ void processBootloaderCommand(void) {
 		break;
 	}
 
-	bufferIndex = 0;
-	memset(messageBuffer, 0, BUFFER_SIZE);
 }
 
 void handleGetVersion(void) {
@@ -167,25 +283,9 @@ void handleReadMemory(void) {
 	/*
 	 * Validate the outer command packet checksum.
 	 */
-	uint16_t packetChecksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
 
 	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
 			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
-
-	uint8_t receivedPacketChecksum =
-			(uint8_t) messageBuffer[packetChecksumIndex];
-
-	if (calculatedPacketChecksum != receivedPacketChecksum) {
-#ifdef DEBUG_PRINT
-		printf("Read Memory packet checksum error. "
-				"Calculated: 0x%02X, Received: 0x%02X\r\n",
-				calculatedPacketChecksum, receivedPacketChecksum);
-#endif
-
-		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
-
-		return;
-	}
 
 	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
 			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
@@ -278,24 +378,9 @@ void handleGoToAddress(void) {
 	/*
 	 * Validate the complete command packet checksum.
 	 */
-	uint16_t packetChecksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
 
 	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
 			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
-
-	uint8_t receivedPacketChecksum =
-			(uint8_t) messageBuffer[packetChecksumIndex];
-
-	if (calculatedPacketChecksum != receivedPacketChecksum) {
-#ifdef DEBUG_PRINT
-		printf("Go To Address packet checksum error. "
-				"Calculated: 0x%02X, Received: 0x%02X\r\n",
-				calculatedPacketChecksum, receivedPacketChecksum);
-#endif
-
-		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
-		return;
-	}
 
 	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
 			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
@@ -391,23 +476,9 @@ void handleWriteMemory(void) {
 	 * Checksum input:
 	 * Length XOR Command XOR Payload
 	 */
-	uint16_t checksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
 
 	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
 			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
-
-	uint8_t receivedPacketChecksum = (uint8_t) messageBuffer[checksumIndex];
-
-	if (calculatedPacketChecksum != receivedPacketChecksum) {
-#ifdef DEBUG_PRINT
-		printf("Write Memory packet checksum error. "
-				"Calculated: 0x%02X, Received: 0x%02X\r\n",
-				calculatedPacketChecksum, receivedPacketChecksum);
-#endif
-
-		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
-		return;
-	}
 
 	/*
 	 * Reconstruct the destination address from the packet.
@@ -472,13 +543,6 @@ void handleWriteMemory(void) {
 	printf("Write Memory request accepted. "
 			"Address: 0x%08lX, Length: %lu bytes\r\n", address, totalLength);
 #endif
-
-	/*
-	 * The interrupt-based command reception is no longer needed
-	 * while firmware data blocks are received synchronously.
-	 */
-	bufferIndex = 0U;
-	memset(messageBuffer, 0, BUFFER_SIZE);
 
 	/*
 	 * Inform the host that the bootloader is ready to receive
@@ -847,23 +911,9 @@ void handleReadoutProtectUnprotect(void) {
 	/*
 	 * Validate the complete command packet checksum.
 	 */
-	uint16_t checksumIndex = 2U + (uint16_t) (uint8_t) messageBuffer[1];
 
 	uint8_t calculatedChecksum = calculateCRC(messageBuffer, 1U,
 			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
-
-	uint8_t receivedChecksum = (uint8_t) messageBuffer[checksumIndex];
-
-	if (calculatedChecksum != receivedChecksum) {
-#ifdef DEBUG_PRINT
-		printf(
-				"RDP packet checksum error. Calculated: 0x%02X, Received: 0x%02X\r\n",
-				calculatedChecksum, receivedChecksum);
-#endif
-
-		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
-		return;
-	}
 
 	uint8_t requestedLevel = (uint8_t) messageBuffer[offset];
 
@@ -1279,13 +1329,18 @@ void handleResetOperation(void) {
 	HAL_NVIC_SystemReset();
 }
 
-uint8_t calculateCRC(char *data, uint16_t startIndex, uint16_t length) {
-	uint8_t crc = 0x00;
-
-	for (uint16_t i = 0; i < length; i++) {
-		crc ^= (uint8_t) data[startIndex + i];
+uint8_t calculateCRC(const uint8_t *data, uint16_t startIndex, uint16_t length) {
+	if ((data == NULL) || (length == 0U)) {
+		return 0U;
 	}
-	return crc;
+
+	uint8_t checksum = 0U;
+
+	for (uint16_t i = 0U; i < length; i++) {
+		checksum ^= data[startIndex + i];
+	}
+
+	return checksum;
 }
 
 void handleUnknownCommand(void) {

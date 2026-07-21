@@ -36,6 +36,61 @@ namespace STM32Flasher
         private readonly object statusResponseLock = new object();
         private TaskCompletionSource<byte> pendingStatusResponse;
 
+        private const byte BootloaderHeader = 0x7F;
+        private const int MaximumCommandLength = 32;
+
+        private readonly object serialWriteLock = new object();
+
+        private byte[] CreateBootloaderCommandPacket(byte command, byte[] payload)
+        {
+            if (payload == null)
+            {
+                payload = Array.Empty<byte>();
+            }
+
+            int commandLength = 1 + payload.Length;
+
+            if (commandLength > MaximumCommandLength)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(payload),
+                    $"The command body cannot exceed " +
+                    $"{MaximumCommandLength} bytes."
+                );
+            }
+
+            /*
+             * Complete packet:
+             *
+             * Header + Length + Command + Payload + Checksum
+             */
+            byte[] packet = new byte[commandLength + 3];
+
+            packet[0] = BootloaderHeader;
+            packet[1] = (byte)commandLength;
+            packet[2] = command;
+
+            if (payload.Length > 0)
+            {
+                Array.Copy(payload, 0, packet, 3, payload.Length);
+            }
+
+            /*
+             * Checksum input:
+             *
+             * Length XOR Command XOR Payload bytes
+             */
+            byte checksum = (byte)0U;
+
+            for (int i = 1; i < packet.Length - 1; i++)
+            {
+                checksum ^= packet[i];
+            }
+
+            packet[packet.Length - 1] = checksum;
+
+            return packet;
+        }
         private TaskCompletionSource<byte> CreateStatusResponseWaiter()
         {
             lock (statusResponseLock)
@@ -432,26 +487,25 @@ namespace STM32Flasher
             return crc;
         }
 
-        private void SendBootLoaderCommand(byte cmd, byte[] data)
+        private void SendBootLoaderCommand(byte command, byte[] payload)
         {
-            List<byte> packet = new List<byte>();
-            packet.Add(0x7F); //bootloader header
-            packet.Add((byte)(1 + data.Length)); //len = cmd + data
-            packet.Add(cmd);
-            packet.AddRange(data);
-
-            byte[] crcInput = packet.Skip(1).ToArray();
-            byte crc = calculateCRC(crcInput);
-            packet.Add(crc); //CRC
-
-            if (serialPort1.IsOpen)
+            if (!serialPort1.IsOpen)
             {
-                serialPort1.Write(packet.ToArray(), 0, packet.Count);
-                serialPort1.Write("\r");
-                serialPort1.Write("\n");
+                throw new InvalidOperationException(
+                    "Serial port is not open."
+                );
             }
 
-        
+            byte[] packet = CreateBootloaderCommandPacket(command, payload);
+
+            /*
+             * Prevent multiple UI or asynchronous operations from
+             * interleaving bytes on the serial port.
+             */
+            lock (serialWriteLock)
+            {
+                serialPort1.Write(packet, 0, packet.Length);
+            }
         }
         private void serialPort1_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {

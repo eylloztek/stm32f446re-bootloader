@@ -32,6 +32,28 @@
 #define NACK								0x1F
 #define UNKNOWN							0x99
 
+/*
+ * Maximum number of bytes in the command body.
+ *
+ * The command body contains:
+ * Command byte + payload bytes
+ *
+ * Firmware data blocks are transferred separately and are not
+ * stored inside this command buffer.
+ */
+#define BOOTLOADER_MAX_COMMAND_LENGTH       32U
+
+/*
+ * Complete command frame:
+ *
+ * Header + Length + Command body + Checksum
+ */
+#define BOOTLOADER_RX_BUFFER_SIZE           \
+    (BOOTLOADER_MAX_COMMAND_LENGTH + 3U)
+
+#define BOOTLOADER_MIN_COMMAND_LENGTH       1U
+#define BOOTLOADER_FRAME_TIMEOUT_MS         250U
+
 #define WRITE_COMMAND_TIMEOUT_MS        	3000U
 #define WRITE_BLOCK_TIMEOUT_MS          	5000U
 
@@ -84,7 +106,7 @@
 #define APPLICATION_VECTOR_ALIGNMENT    0x80UL
 #define APPLICATION_VECTOR_ENTRY_SIZE   8UL
 
-void processBootloaderCommand(void);
+void processBootloaderCommand(uint16_t packetLength);
 void handleGetVersion(void);
 void handleGetHelp(void);
 void handleGetID(void);
@@ -98,7 +120,7 @@ void handleWriteProtectUnprotect(void);
 void handleReadoutProtectUnprotect(void);
 void handleResetOperation(void);
 void handleUnknownCommand(void);
-uint8_t calculateCRC(char *data, uint16_t startIndex, uint16_t length);
+uint8_t calculateCRC(const uint8_t *data, uint16_t startIndex, uint16_t length);
 uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length,
 		uint32_t regionStart, uint32_t regionEnd);
 uint8_t verifyReadRange(uint32_t address, uint32_t length);
