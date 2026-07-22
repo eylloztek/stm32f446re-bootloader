@@ -391,98 +391,98 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	lastReceivedByteTick = HAL_GetTick();
 
 	switch (parserState) {
-		case BOOTLOADER_PARSER_WAIT_HEADER: {
-			/*
-			 * Ignore all bytes until a valid bootloader header
-			 * is received.
-			 */
-			if (rxChar == BOOTLOADER_HEADER) {
-				messageBuffer[0] = rxChar;
-				bufferIndex = 1U;
+	case BOOTLOADER_PARSER_WAIT_HEADER: {
+		/*
+		 * Ignore all bytes until a valid bootloader header
+		 * is received.
+		 */
+		if (rxChar == BOOTLOADER_HEADER) {
+			messageBuffer[0] = rxChar;
+			bufferIndex = 1U;
 
-				parserState = BOOTLOADER_PARSER_WAIT_LENGTH;
-			}
-
-			break;
+			parserState = BOOTLOADER_PARSER_WAIT_LENGTH;
 		}
 
-		case BOOTLOADER_PARSER_WAIT_LENGTH: {
-			/*
-			 * The length field contains:
-			 *
-			 * Command byte + payload bytes
-			 */
-			if ((rxChar < BOOTLOADER_MIN_COMMAND_LENGTH)
-					|| (rxChar > BOOTLOADER_MAX_COMMAND_LENGTH)) {
+		break;
+	}
+
+	case BOOTLOADER_PARSER_WAIT_LENGTH: {
+		/*
+		 * The length field contains:
+		 *
+		 * Command byte + payload bytes
+		 */
+		if ((rxChar < BOOTLOADER_MIN_COMMAND_LENGTH)
+				|| (rxChar > BOOTLOADER_MAX_COMMAND_LENGTH)) {
 #ifdef DEBUG_PRINT
 			printf("Invalid command length received: %u\r\n", rxChar);
 #endif
 
-				parserErrorReady = 1U;
+			parserErrorReady = 1U;
 
-				BootloaderParser_Reset();
-				break;
-			}
-
-			messageBuffer[1] = rxChar;
-			bufferIndex = 2U;
-
-			/*
-			 * Complete frame:
-			 *
-			 * Header + Length + Body + Checksum
-			 */
-			expectedPacketLength = (uint16_t) rxChar + 3U;
-
-			parserState = BOOTLOADER_PARSER_WAIT_FRAME;
-
+			BootloaderParser_Reset();
 			break;
 		}
 
-		case BOOTLOADER_PARSER_WAIT_FRAME: {
-			if (bufferIndex >= BOOTLOADER_RX_BUFFER_SIZE) {
+		messageBuffer[1] = rxChar;
+		bufferIndex = 2U;
+
+		/*
+		 * Complete frame:
+		 *
+		 * Header + Length + Command body + CRC-32
+		 */
+		expectedPacketLength = (uint16_t) rxChar + BOOTLOADER_FRAME_OVERHEAD;
+
+		parserState = BOOTLOADER_PARSER_WAIT_FRAME;
+
+		break;
+	}
+
+	case BOOTLOADER_PARSER_WAIT_FRAME: {
+		if (bufferIndex >= BOOTLOADER_RX_BUFFER_SIZE) {
 #ifdef DEBUG_PRINT
 			printf("UART command buffer overflow rejected.\r\n");
 #endif
 
-				parserErrorReady = 1U;
+			parserErrorReady = 1U;
 
-				BootloaderParser_Reset();
-				break;
-			}
+			BootloaderParser_Reset();
+			break;
+		}
 
-			messageBuffer[bufferIndex] = rxChar;
+		messageBuffer[bufferIndex] = rxChar;
 
-			bufferIndex++;
+		bufferIndex++;
 
-			if (bufferIndex == expectedPacketLength) {
-				/*
-				 * Stop rearming UART reception until the main loop
-				 * has processed the complete command frame.
-				 */
-				commandReady = 1U;
-				return;
-			}
+		if (bufferIndex == expectedPacketLength) {
+			/*
+			 * Stop rearming UART reception until the main loop
+			 * has processed the complete command frame.
+			 */
+			commandReady = 1U;
+			return;
+		}
 
 		if (bufferIndex > expectedPacketLength) {
 #ifdef DEBUG_PRINT
 			printf("UART command frame exceeded expected length.\r\n");
 #endif
 
-				parserErrorReady = 1U;
-
-				BootloaderParser_Reset();
-			}
-
-			break;
-		}
-
-		default: {
 			parserErrorReady = 1U;
 
 			BootloaderParser_Reset();
-			break;
 		}
+
+		break;
+	}
+
+	default: {
+		parserErrorReady = 1U;
+
+		BootloaderParser_Reset();
+		break;
+	}
 	}
 
 	if (commandReady == 0U) {
@@ -493,37 +493,46 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-    if ((huart == NULL) || (huart->Instance != USART2)){
-        return;
-    }
+	if ((huart == NULL) || (huart->Instance != USART2)) {
+		return;
+	}
+
+	uint32_t errorCode = huart->ErrorCode;
+
+	if (errorCode == HAL_UART_ERROR_NONE) {
+		return;
+	}
 
 #ifdef DEBUG_PRINT
-    printf(
-        "UART receive error: 0x%08lX\r\n",
-        huart->ErrorCode);
+	printf("UART receive error: 0x%08lX\r\n", errorCode);
 #endif
 
-    parserErrorReady = 1U;
+	parserErrorReady = 1U;
 
-    /*
-     * Abort the active interrupt reception. Reception is restarted
-     * from HAL_UART_AbortReceiveCpltCallback().
-     */
-    if (HAL_UART_AbortReceive_IT(huart) != HAL_OK){
-        BootloaderParser_Reset();
+	/*
+	 * Abort the failed interrupt-based reception.
+	 * Reception is restarted from the abort completion callback.
+	 */
+	if (HAL_UART_AbortReceive_IT(huart) != HAL_OK) {
+		BootloaderParser_Reset();
 
-        (void)BootloaderUart_StartReception();
-    }
+		if (BootloaderUart_StartReception() != HAL_OK) {
+#ifdef DEBUG_PRINT
+			printf("UART reception could not be restarted "
+					"after an error.\r\n");
+#endif
+		}
+	}
 }
 
 void HAL_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart) {
-    if ((huart == NULL) || (huart->Instance != USART2)) {
-        return;
-    }
+	if ((huart == NULL) || (huart->Instance != USART2)) {
+		return;
+	}
 
-    BootloaderParser_Reset();
+	BootloaderParser_Reset();
 
-    (void)BootloaderUart_StartReception();
+	(void) BootloaderUart_StartReception();
 }
 /* USER CODE END 4 */
 

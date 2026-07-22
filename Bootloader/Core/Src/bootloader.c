@@ -14,6 +14,78 @@ extern uint8_t counterTest;
 static uint8_t validateBootloaderPacket(uint16_t packetLength);
 static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength);
 
+static uint32_t readUint32BigEndian(const uint8_t *data);
+static void writeUint32BigEndian(uint8_t *destination, uint32_t value);
+static uint32_t crc32Update(uint32_t crc, const uint8_t *data, uint32_t length);
+static uint32_t calculateBlockCrc32(uint8_t n, const uint8_t *data,
+		uint16_t dataLength);
+
+static uint32_t readUint32BigEndian(const uint8_t *data) {
+	if (data == NULL) {
+		return 0U;
+	}
+
+	return ((uint32_t) data[0] << 24U) | ((uint32_t) data[1] << 16U)
+			| ((uint32_t) data[2] << 8U) | ((uint32_t) data[3]);
+}
+
+static void writeUint32BigEndian(uint8_t *destination, uint32_t value) {
+	if (destination == NULL) {
+		return;
+	}
+
+	destination[0] = (uint8_t) ((value >> 24U) & 0xFFU);
+	destination[1] = (uint8_t) ((value >> 16U) & 0xFFU);
+	destination[2] = (uint8_t) ((value >> 8U) & 0xFFU);
+	destination[3] = (uint8_t) (value & 0xFFU);
+}
+
+static uint32_t crc32Update(uint32_t crc, const uint8_t *data, uint32_t length) {
+	if ((data == NULL) && (length != 0U)) {
+		return crc;
+	}
+
+	for (uint32_t byteIndex = 0U; byteIndex < length; byteIndex++) {
+		crc ^= data[byteIndex];
+
+		for (uint8_t bitIndex = 0U; bitIndex < 8U; bitIndex++) {
+			uint32_t mask = 0U - (crc & 1U);
+
+			crc = (crc >> 1U) ^ (CRC32_REVERSED_POLYNOMIAL & mask);
+		}
+	}
+
+	return crc;
+}
+
+uint32_t calculateCrc32(const uint8_t *data, uint32_t length) {
+	if ((data == NULL) && (length != 0U)) {
+		return 0U;
+	}
+
+	uint32_t crc = CRC32_INITIAL_VALUE;
+
+	crc = crc32Update(crc, data, length);
+
+	return crc ^ CRC32_FINAL_XOR_VALUE;
+}
+
+static uint32_t calculateBlockCrc32(uint8_t n, const uint8_t *data,
+		uint16_t dataLength) {
+	uint32_t crc = CRC32_INITIAL_VALUE;
+
+	/*
+	 * Block CRC input:
+	 *
+	 * N byte + firmware data bytes
+	 */
+	crc = crc32Update(crc, &n, 1U);
+
+	crc = crc32Update(crc, data, dataLength);
+
+	return crc ^ CRC32_FINAL_XOR_VALUE;
+}
+
 static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength) {
 	switch (command) {
 	case GET_HELP:
@@ -32,7 +104,16 @@ static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength) {
 	}
 
 	case WRITE_MEMORY: {
-		return commandLength == 10U;
+		return commandLength == 14U;
+	}
+
+	case GET_CHECKSUM: {
+		/*
+		 * Command byte : 1 byte
+		 * Address      : 4 bytes
+		 * Length       : 4 bytes
+		 */
+		return commandLength == 9U;
 	}
 
 	case ERASE: {
@@ -71,7 +152,11 @@ static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength) {
 }
 
 static uint8_t validateBootloaderPacket(uint16_t packetLength) {
-	if ((packetLength < 4U) || (packetLength > BOOTLOADER_RX_BUFFER_SIZE)) {
+	uint16_t minimumPacketLength = BOOTLOADER_MIN_COMMAND_LENGTH
+			+ BOOTLOADER_FRAME_OVERHEAD;
+
+	if ((packetLength < minimumPacketLength)
+			|| (packetLength > BOOTLOADER_RX_BUFFER_SIZE)) {
 		return 0U;
 	}
 
@@ -86,9 +171,10 @@ static uint8_t validateBootloaderPacket(uint16_t packetLength) {
 		return 0U;
 	}
 
-	uint16_t expectedLength = (uint16_t) commandLength + 3U;
+	uint16_t expectedPacketLength = (uint16_t) commandLength
+			+ BOOTLOADER_FRAME_OVERHEAD;
 
-	if (packetLength != expectedLength) {
+	if (packetLength != expectedPacketLength) {
 		return 0U;
 	}
 
@@ -98,18 +184,30 @@ static uint8_t validateBootloaderPacket(uint16_t packetLength) {
 		return 0U;
 	}
 
-	uint16_t checksumIndex = 2U + (uint16_t) commandLength;
+	/*
+	 * CRC starts immediately after the command body.
+	 *
+	 * Header is at index 0.
+	 * Length is at index 1.
+	 * Command body starts at index 2.
+	 */
+	uint16_t crcIndex = 2U + (uint16_t) commandLength;
 
-	uint8_t calculatedChecksum = calculateCRC(messageBuffer, 1U,
-			(uint16_t) commandLength + 1U);
+	uint32_t receivedCrc = readUint32BigEndian(&messageBuffer[crcIndex]);
 
-	uint8_t receivedChecksum = messageBuffer[checksumIndex];
+	/*
+	 * CRC input:
+	 *
+	 * Length byte + command body
+	 */
+	uint32_t calculatedCrc = calculateCrc32(&messageBuffer[1],
+			(uint32_t) commandLength + 1U);
 
-	if (calculatedChecksum != receivedChecksum) {
+	if (calculatedCrc != receivedCrc) {
 #ifdef DEBUG_PRINT
-		printf("Command checksum error. "
-				"Calculated: 0x%02X, Received: 0x%02X\r\n", calculatedChecksum,
-				receivedChecksum);
+		printf("Command CRC-32 error. "
+				"Calculated: 0x%08lX, Received: 0x%08lX\r\n", calculatedCrc,
+				receivedCrc);
 #endif
 
 		return 0U;
@@ -161,6 +259,9 @@ void processBootloaderCommand(uint16_t packetLength) {
 	case READOUT_PROTECT_UNPROTECT:
 		handleReadoutProtectUnprotect();
 		break;
+	case GET_CHECKSUM:
+		handleGetChecksum();
+		break;
 	case RESET:
 		handleResetOperation();
 		break;
@@ -172,63 +273,53 @@ void processBootloaderCommand(uint16_t packetLength) {
 }
 
 void handleGetVersion(void) {
-	uint8_t response[2] = { 0 };
-
-	uint8_t crc = calculateCRC(messageBuffer, 1, messageBuffer[1] + 1);
-
-	if (crc != messageBuffer[3]) {
-		response[0] = NACK;
-	} else {
-		if (BOOTLOADER_VERSION > 0 && BOOTLOADER_VERSION <= 255) {
-			response[0] = ACK;
-			response[1] = BOOTLOADER_VERSION;
-		} else {
-			response[0] = NACK;
-			response[1] = UNKNOWN;
-		}
-
-	}
+	uint8_t response[2] = { ACK, BOOTLOADER_VERSION };
 
 #ifdef DEBUG_PRINT
-	printf("Bootloader Version: 0x%x \r\n", BOOTLOADER_VERSION);
+	printf("Bootloader Version: 0x%02X\r\n",
+	BOOTLOADER_VERSION);
 #endif
+
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
 
 }
 
 void handleGetHelp(void) {
-	uint8_t commands[] = {
-	GET_HELP, 						//0x00
-			GET_VERSION,					//0x01
-			GET_ID,							//0x02
-			READ_MEMORY,					//0x11
-			GO_TO_ADDRESS,					//0x21
-			WRITE_MEMORY,					//0x31
-			ERASE,							//0x43
-			WRITE_PROTECT_UNPROTECT,		//0x63
-			READOUT_PROTECT_UNPROTECT,		//0x82
-			GET_CHECKSUM,					//0xA1
-			};
+	const uint8_t commands[] = {
+	GET_HELP,
+	GET_VERSION,
+	GET_ID,
+	READ_MEMORY,
+	GO_TO_ADDRESS,
+	WRITE_MEMORY,
+	ERASE,
+	WRITE_PROTECT_UNPROTECT,
+	READOUT_PROTECT_UNPROTECT,
+	GET_CHECKSUM,
+	RESET };
 
-	uint8_t totalCommands = sizeof(commands) / sizeof(commands[0]);
+	const uint8_t totalCommands = (uint8_t) (sizeof(commands)
+			/ sizeof(commands[0]));
 
-	uint8_t response[1 + 1 + 1 + sizeof(commands)] = { 0 };
+	uint8_t response[3U + sizeof(commands)] = { 0 };
 
 	response[0] = ACK;
 	response[1] = totalCommands;
 	response[2] = BOOTLOADER_VERSION;
-	memcpy(&response[3], commands, totalCommands);
+
+	memcpy(&response[3], commands, sizeof(commands));
 
 #ifdef DEBUG_PRINT
-	printf("Help Messages:\r\n");
-	for (int i = 0; i < sizeof(response); i++) {
-		printf("%02X ", response[i]);
+	printf("Supported bootloader commands:\r\n");
+
+	for (uint32_t i = 0U; i < sizeof(commands); i++) {
+		printf("0x%02X ", commands[i]);
 	}
+
 	printf("\r\n");
 #endif
 
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
-
 }
 
 void handleGetID(void) {
@@ -279,13 +370,6 @@ void handleReadMemory(void) {
 
 		return;
 	}
-
-	/*
-	 * Validate the outer command packet checksum.
-	 */
-
-	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
-			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
 
 	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
 			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
@@ -375,13 +459,6 @@ void handleGoToAddress(void) {
 		return;
 	}
 
-	/*
-	 * Validate the complete command packet checksum.
-	 */
-
-	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
-			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
-
 	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
 			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
 			| ((uint32_t) (uint8_t) messageBuffer[offset + 2U] << 8U)
@@ -447,53 +524,27 @@ void handleGoToAddress(void) {
 
 void handleWriteMemory(void) {
 	uint8_t response = NACK;
-	const uint8_t offset = 3U;
-	const uint8_t expectedCommandLength = 10U;
 
-	/*
-	 * The command length contains:
-	 *
-	 * Command byte       : 1 byte
-	 * Address            : 4 bytes
-	 * Address checksum   : 1 byte
-	 * Total image length : 4 bytes
-	 *
-	 * Total              : 10 bytes
-	 */
-	if ((uint8_t) messageBuffer[1] != expectedCommandLength) {
+	const uint8_t offset = 3U;
+	const uint8_t expectedCommandLength = 14U;
+
+	if (messageBuffer[1] != expectedCommandLength) {
 #ifdef DEBUG_PRINT
-		printf("Invalid Write Memory command length: %u\r\n",
-				(uint8_t) messageBuffer[1]);
+		printf("Invalid Write Memory command length: %u\r\n", messageBuffer[1]);
 #endif
 
 		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 		return;
 	}
 
-	/*
-	 * Validate the outer command packet checksum.
-	 *
-	 * Checksum input:
-	 * Length XOR Command XOR Payload
-	 */
+	uint32_t startAddress = readUint32BigEndian(&messageBuffer[offset]);
 
-	uint8_t calculatedPacketChecksum = calculateCRC(messageBuffer, 1U,
-			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
+	uint8_t receivedAddressChecksum = messageBuffer[offset + 4U];
 
-	/*
-	 * Reconstruct the destination address from the packet.
-	 */
-	uint32_t address = ((uint32_t) (uint8_t) messageBuffer[offset] << 24U)
-			| ((uint32_t) (uint8_t) messageBuffer[offset + 1U] << 16U)
-			| ((uint32_t) (uint8_t) messageBuffer[offset + 2U] << 8U)
-			| ((uint32_t) (uint8_t) messageBuffer[offset + 3U]);
-
-	uint8_t receivedAddressChecksum = (uint8_t) messageBuffer[offset + 4U];
-
-	uint8_t calculatedAddressChecksum = (uint8_t) messageBuffer[offset]
-			^ (uint8_t) messageBuffer[offset + 1U]
-			^ (uint8_t) messageBuffer[offset + 2U]
-			^ (uint8_t) messageBuffer[offset + 3U];
+	uint8_t calculatedAddressChecksum = messageBuffer[offset]
+			^ messageBuffer[offset + 1U] ^ messageBuffer[offset + 2U]
+			^ messageBuffer[offset + 3U];
 
 	if (receivedAddressChecksum != calculatedAddressChecksum) {
 #ifdef DEBUG_PRINT
@@ -503,16 +554,14 @@ void handleWriteMemory(void) {
 #endif
 
 		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 		return;
 	}
 
-	/*
-	 * Reconstruct the complete image length from the packet.
-	 */
-	uint32_t totalLength = ((uint32_t) (uint8_t) messageBuffer[offset + 5U]
-			<< 24U) | ((uint32_t) (uint8_t) messageBuffer[offset + 6U] << 16U)
-			| ((uint32_t) (uint8_t) messageBuffer[offset + 7U] << 8U)
-			| ((uint32_t) (uint8_t) messageBuffer[offset + 8U]);
+	uint32_t totalLength = readUint32BigEndian(&messageBuffer[offset + 5U]);
+
+	uint32_t expectedImageCrc = readUint32BigEndian(
+			&messageBuffer[offset + 9U]);
 
 	if (totalLength == 0U) {
 #ifdef DEBUG_PRINT
@@ -520,33 +569,32 @@ void handleWriteMemory(void) {
 #endif
 
 		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 		return;
 	}
 
-	/*
-	 * Validate the complete image range before receiving any
-	 * firmware data blocks.
-	 *
-	 * The complete image must remain inside the application area.
-	 */
-	if (!verifyWriteRange(address, totalLength)) {
+	if (!verifyWriteRange(startAddress, totalLength)) {
 #ifdef DEBUG_PRINT
 		printf("Write Memory range rejected. "
-				"Address: 0x%08lX, Length: %lu\r\n", address, totalLength);
+				"Address: 0x%08lX, Length: %lu\r\n", startAddress, totalLength);
 #endif
 
 		HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 		return;
 	}
 
 #ifdef DEBUG_PRINT
-	printf("Write Memory request accepted. "
-			"Address: 0x%08lX, Length: %lu bytes\r\n", address, totalLength);
+	printf("Write Memory request accepted.\r\n"
+			"Address      : 0x%08lX\r\n"
+			"Length       : %lu\r\n"
+			"Expected CRC : 0x%08lX\r\n", startAddress, totalLength,
+			expectedImageCrc);
 #endif
 
 	/*
-	 * Inform the host that the bootloader is ready to receive
-	 * the first firmware data block.
+	 * Notify the host that the bootloader is ready for
+	 * the first firmware block.
 	 */
 	response = ACK;
 
@@ -555,134 +603,167 @@ void handleWriteMemory(void) {
 		return;
 	}
 
+	uint32_t currentAddress = startAddress;
 	uint32_t bytesWritten = 0U;
 
 	while (bytesWritten < totalLength) {
 		uint8_t n = 0U;
 
-		/*
-		 * N represents:
-		 *
-		 * Block data length - 1
-		 *
-		 * N = 0   -> 1 byte
-		 * N = 255 -> 256 bytes
-		 */
 		if (HAL_UART_Receive(UART_PORT, &n, 1U, WRITE_BLOCK_TIMEOUT_MS)
 				!= HAL_OK) {
 #ifdef DEBUG_PRINT
-			printf("Timeout or UART error while waiting for block length.\r\n");
+			printf("Timeout or UART error while waiting "
+					"for block length.\r\n");
 #endif
 
 			response = NACK;
 
 			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 			return;
 		}
 
 		uint16_t blockLength = (uint16_t) n + 1U;
 
-		uint32_t remainingLength = totalLength - bytesWritten;
+		uint32_t remainingImageLength = totalLength - bytesWritten;
 
-		/*
-		 * A block must never contain more data than the number
-		 * of bytes remaining in the image.
-		 */
-		if ((uint32_t) blockLength > remainingLength) {
+		if ((uint32_t) blockLength > remainingImageLength) {
 #ifdef DEBUG_PRINT
-			printf("Invalid block length. Block: %u, Remaining: %lu\r\n",
-					blockLength, remainingLength);
+			printf("Invalid firmware block length. "
+					"Block: %u, Remaining: %lu\r\n", blockLength,
+					remainingImageLength);
 #endif
 
 			response = NACK;
 
 			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 			return;
 		}
 
 		/*
-		 * The buffer contains:
+		 * Buffer layout:
 		 *
-		 * Data     : up to 256 bytes
-		 * Checksum : 1 byte
+		 * Data   : up to 256 bytes
+		 * CRC-32 : 4 bytes
 		 */
-		uint8_t blockBuffer[257U] = { 0 };
+		uint8_t blockBuffer[256U + BOOTLOADER_CRC_SIZE] = { 0 };
 
-		if (HAL_UART_Receive(UART_PORT, blockBuffer, blockLength + 1U,
-		WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
+		uint16_t receivedBlockLength = blockLength + BOOTLOADER_CRC_SIZE;
+
+		if (HAL_UART_Receive(UART_PORT, blockBuffer, receivedBlockLength,
+				WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
 #ifdef DEBUG_PRINT
-			printf("Timeout or UART error while receiving firmware block.\r\n");
+			printf("Timeout or UART error while receiving "
+					"firmware block.\r\n");
 #endif
 
 			response = NACK;
 
 			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
+			return;
+		}
+
+		uint32_t receivedBlockCrc = readUint32BigEndian(
+				&blockBuffer[blockLength]);
+
+		uint32_t calculatedBlockCrc = calculateBlockCrc32(n, blockBuffer,
+				blockLength);
+
+		if (receivedBlockCrc != calculatedBlockCrc) {
+#ifdef DEBUG_PRINT
+			printf("Firmware block CRC-32 error. "
+					"Calculated: 0x%08lX, Received: 0x%08lX\r\n",
+					calculatedBlockCrc, receivedBlockCrc);
+#endif
+
+			response = NACK;
+
+			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
+			return;
+		}
+
+		if (flashWrite(currentAddress, blockBuffer, blockLength) != HAL_OK) {
+#ifdef DEBUG_PRINT
+			printf("Flash programming failed at address "
+					"0x%08lX.\r\n", currentAddress);
+#endif
+
+			response = NACK;
+
+			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 			return;
 		}
 
 		/*
-		 * Block checksum:
-		 *
-		 * N XOR Data[0] XOR Data[1] XOR ...
+		 * Verify the block directly from Flash before accepting it.
 		 */
-		uint8_t calculatedBlockChecksum = n;
-
-		for (uint16_t i = 0U; i < blockLength; i++) {
-			calculatedBlockChecksum ^= blockBuffer[i];
-		}
-
-		uint8_t receivedBlockChecksum = blockBuffer[blockLength];
-
-		if (calculatedBlockChecksum != receivedBlockChecksum) {
+		if (memcmp((const void*) currentAddress, blockBuffer, blockLength)
+				!= 0) {
 #ifdef DEBUG_PRINT
-			printf("Firmware block checksum error. "
-					"Calculated: 0x%02X, Received: 0x%02X\r\n",
-					calculatedBlockChecksum, receivedBlockChecksum);
+			printf("Flash readback verification failed at "
+					"address 0x%08lX.\r\n", currentAddress);
 #endif
 
 			response = NACK;
 
 			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
+
 			return;
 		}
 
-		/*
-		 * Write the validated block to Flash memory.
-		 */
-		if (flashWrite(address, blockBuffer, blockLength) != HAL_OK) {
-#ifdef DEBUG_PRINT
-			printf("Flash programming failed at address 0x%08lX.\r\n", address);
-#endif
-
-			response = NACK;
-
-			HAL_UART_Transmit(UART_PORT, &response, 1U, HAL_MAX_DELAY);
-			return;
-		}
-
-		address += blockLength;
+		currentAddress += blockLength;
 		bytesWritten += blockLength;
 
 #ifdef DEBUG_PRINT
-		printf("Firmware block written. "
+		printf("Firmware block verified. "
 				"Progress: %lu / %lu bytes\r\n", bytesWritten, totalLength);
 #endif
 
-		/*
-		 * Send ACK after every successfully written intermediate block.
-		 *
-		 * Send WRITE_COMPLETE instead of ACK after the final block.
-		 */
-		if (bytesWritten == totalLength) {
-			response = WRITE_COMPLETE;
-		} else {
+		if (bytesWritten < totalLength) {
 			response = ACK;
+
+			if (HAL_UART_Transmit(UART_PORT, &response, 1U,
+					WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
+				return;
+			}
+
+			continue;
 		}
 
-		if (HAL_UART_Transmit(UART_PORT, &response, 1U,
-		WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
-			return;
+		/*
+		 * All blocks have been written. Recalculate CRC-32 from
+		 * the actual Flash contents instead of the receive buffer.
+		 */
+		uint32_t actualImageCrc = calculateCrc32((const uint8_t*) startAddress,
+				totalLength);
+
+#ifdef DEBUG_PRINT
+		printf("Firmware image verification completed.\r\n"
+				"Expected CRC : 0x%08lX\r\n"
+				"Actual CRC   : 0x%08lX\r\n", expectedImageCrc, actualImageCrc);
+#endif
+
+		if (actualImageCrc != expectedImageCrc) {
+			response = NACK;
+
+#ifdef DEBUG_PRINT
+			printf("Firmware image CRC-32 mismatch.\r\n");
+#endif
+		} else {
+			response = WRITE_COMPLETE;
+
+#ifdef DEBUG_PRINT
+			printf("Firmware image CRC-32 verified successfully.\r\n");
+#endif
 		}
+
+		HAL_UART_Transmit(UART_PORT, &response, 1U, WRITE_COMMAND_TIMEOUT_MS);
+
+		return;
 	}
 }
 
@@ -908,13 +989,6 @@ void handleReadoutProtectUnprotect(void) {
 		return;
 	}
 
-	/*
-	 * Validate the complete command packet checksum.
-	 */
-
-	uint8_t calculatedChecksum = calculateCRC(messageBuffer, 1U,
-			(uint16_t) (uint8_t) messageBuffer[1] + 1U);
-
 	uint8_t requestedLevel = (uint8_t) messageBuffer[offset];
 
 	/*
@@ -1099,23 +1173,60 @@ void handleReadoutProtectUnprotect(void) {
 	HAL_NVIC_SystemReset();
 }
 
-HAL_StatusTypeDef flashWrite(uint32_t address, const uint8_t *data,
-		uint32_t dataLength) {
+void handleGetChecksum(void) {
+	uint8_t response[BOOTLOADER_CRC_RESPONSE_SIZE] = { 0 };
+
+	const uint8_t offset = 3U;
 
 	/*
-	 * Reject invalid pointers and zero-length operations.
+	 * Payload:
+	 *
+	 * Address : 4 bytes
+	 * Length  : 4 bytes
 	 */
+	uint32_t address = readUint32BigEndian(&messageBuffer[offset]);
+
+	uint32_t length = readUint32BigEndian(&messageBuffer[offset + 4U]);
+
+	/*
+	 * This command is intended for application image
+	 * verification, so access is restricted to the
+	 * application Flash area.
+	 */
+	if (!verifyWriteRange(address, length)) {
+#ifdef DEBUG_PRINT
+		printf("Get Checksum range rejected. "
+				"Address: 0x%08lX, Length: %lu\r\n", address, length);
+#endif
+
+		response[0] = NACK;
+
+		HAL_UART_Transmit(UART_PORT, response, 1U, HAL_MAX_DELAY);
+
+		return;
+	}
+
+	uint32_t crc = calculateCrc32((const uint8_t*) address, length);
+
+	response[0] = ACK;
+
+	writeUint32BigEndian(&response[1], crc);
+
+#ifdef DEBUG_PRINT
+	printf("Application CRC-32 calculated. "
+			"Address: 0x%08lX, Length: %lu, CRC: 0x%08lX\r\n", address, length,
+			crc);
+#endif
+
+	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
+}
+
+HAL_StatusTypeDef flashWrite(uint32_t address, const uint8_t *data,
+		uint32_t dataLength) {
 	if ((data == NULL) || (dataLength == 0U)) {
 		return HAL_ERROR;
 	}
 
-	/*
-	 * Perform a second range validation inside the low-level
-	 * Flash programming function.
-	 *
-	 * This prevents a future caller from bypassing the validation
-	 * performed by handleWriteMemory().
-	 */
 	if (!verifyWriteRange(address, dataLength)) {
 		return HAL_ERROR;
 	}
@@ -1124,19 +1235,66 @@ HAL_StatusTypeDef flashWrite(uint32_t address, const uint8_t *data,
 		return HAL_ERROR;
 	}
 
-	for (uint32_t i = 0U; i < dataLength; i++) {
-		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, address + i, data[i])
+	uint32_t currentAddress = address;
+	uint32_t dataIndex = 0U;
+	uint32_t remainingLength = dataLength;
+
+	/*
+	 * Program individual bytes until the destination address
+	 * becomes 32-bit aligned.
+	 */
+	while (((currentAddress & 0x03U) != 0U) && (remainingLength > 0U)) {
+		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, currentAddress,
+				data[dataIndex]) != HAL_OK) {
+			HAL_FLASH_Lock();
+			return HAL_ERROR;
+		}
+
+		currentAddress++;
+		dataIndex++;
+		remainingLength--;
+	}
+
+	/*
+	 * Program complete 32-bit words whenever possible.
+	 */
+	while (remainingLength >= 4U) {
+		uint32_t word = ((uint32_t) data[dataIndex])
+				| ((uint32_t) data[dataIndex + 1U] << 8U)
+				| ((uint32_t) data[dataIndex + 2U] << 16U)
+				| ((uint32_t) data[dataIndex + 3U] << 24U);
+
+		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, currentAddress, word)
 				!= HAL_OK) {
 			HAL_FLASH_Lock();
 			return HAL_ERROR;
 		}
+
+		currentAddress += 4U;
+		dataIndex += 4U;
+		remainingLength -= 4U;
+	}
+
+	/*
+	 * Program the final one to three bytes.
+	 */
+	while (remainingLength > 0U) {
+		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, currentAddress,
+				data[dataIndex]) != HAL_OK) {
+			HAL_FLASH_Lock();
+			return HAL_ERROR;
+		}
+
+		currentAddress++;
+		dataIndex++;
+		remainingLength--;
 	}
 
 	HAL_FLASH_Lock();
 
 	return HAL_OK;
-
 }
+
 uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length,
 		uint32_t regionStart, uint32_t regionEnd) {
 	/*
@@ -1379,8 +1537,12 @@ HAL_StatusTypeDef JumpToApplication(uint32_t applicationAddress) {
 	/*
 	 * Stop the interrupt-based UART reception before disabling
 	 * interrupts globally.
+	 *
+	 * A synchronous abort is used intentionally. The asynchronous
+	 * abort callback normally restarts bootloader reception, which
+	 * is not desired during an application jump.
 	 */
-	(void) HAL_UART_AbortReceive_IT(UART_PORT);
+	(void) HAL_UART_AbortReceive(UART_PORT);
 
 	/*
 	 * Wait until any pending UART transmission has completely

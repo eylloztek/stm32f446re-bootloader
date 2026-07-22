@@ -33,13 +33,25 @@ namespace STM32Flasher
 
         private const int MaximumReadLength = 256;
 
-        private readonly object statusResponseLock = new object();
-        private TaskCompletionSource<byte> pendingStatusResponse;
+        private readonly object responseLock = new object();
+
+        private TaskCompletionSource<byte[]> pendingResponseWaiter;
+
+        private readonly List<byte> pendingResponseBuffer = new List<byte>();
+
+        private int pendingResponseExpectedLength;
 
         private const byte BootloaderHeader = 0x7F;
         private const int MaximumCommandLength = 32;
 
         private readonly object serialWriteLock = new object();
+
+        private const uint Crc32ReversedPolynomial = 0xEDB88320U;
+        private const uint Crc32InitialValue = 0xFFFFFFFFU;
+        private const uint Crc32FinalXorValue = 0xFFFFFFFFU;
+
+        private const int BootloaderCrcSize = 4;
+        private const int CrcResponseLength = 5;
 
         private byte[] CreateBootloaderCommandPacket(byte command, byte[] payload)
         {
@@ -50,21 +62,21 @@ namespace STM32Flasher
 
             int commandLength = 1 + payload.Length;
 
-            if (commandLength > MaximumCommandLength)
+            if ((commandLength < 1) || (commandLength > MaximumCommandLength))
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(payload),
-                    $"The command body cannot exceed " +
+                    $"The command body must contain between 1 and " +
                     $"{MaximumCommandLength} bytes."
                 );
             }
 
             /*
-             * Complete packet:
-             *
-             * Header + Length + Command + Payload + Checksum
-             */
-            byte[] packet = new byte[commandLength + 3];
+            * Complete packet:
+            *
+            * Header + Length + Command + Payload + CRC-32
+            */
+            byte[] packet = new byte[commandLength + 2 + BootloaderCrcSize];
 
             packet[0] = BootloaderHeader;
             packet[1] = (byte)commandLength;
@@ -76,132 +88,117 @@ namespace STM32Flasher
             }
 
             /*
-             * Checksum input:
-             *
-             * Length XOR Command XOR Payload bytes
-             */
-            byte checksum = (byte)0U;
+            * CRC input:
+            *
+            * Length + Command + Payload
+            */
+            uint crc = CalculateCrc32(packet, 1, commandLength + 1);
 
-            for (int i = 1; i < packet.Length - 1; i++)
-            {
-                checksum ^= packet[i];
-            }
-
-            packet[packet.Length - 1] = checksum;
+            WriteUInt32BigEndian(packet, packet.Length - BootloaderCrcSize, crc);
 
             return packet;
         }
-        private TaskCompletionSource<byte> CreateStatusResponseWaiter()
+
+        private TaskCompletionSource<byte[]> CreateResponseWaiter(int expectedLength)
         {
-            lock (statusResponseLock)
+            if (expectedLength <= 0)
             {
-                if (pendingStatusResponse != null)
+                throw new ArgumentOutOfRangeException(
+                    nameof(expectedLength)
+                );
+            }
+
+            lock (responseLock)
+            {
+                if (pendingResponseWaiter != null)
                 {
                     throw new InvalidOperationException(
-                        "Another command is already waiting for a status response."
+                        "Another command is already waiting for a response."
                     );
                 }
 
-                pendingStatusResponse = new TaskCompletionSource<byte>(
-                    TaskCreationOptions.RunContinuationsAsynchronously
-                );
+                pendingResponseExpectedLength = expectedLength;
 
-                return pendingStatusResponse;
+                pendingResponseBuffer.Clear();
+
+                pendingResponseWaiter =
+                    new TaskCompletionSource<byte[]>(
+                        TaskCreationOptions.RunContinuationsAsynchronously
+                    );
+
+                return pendingResponseWaiter;
             }
         }
 
-        private void CompleteStatusResponse(byte[] receivedBytes)
+        private void CompletePendingResponse(byte[] receivedBytes)
         {
-            byte statusByte = 0x00;
-            bool statusFound = false;
-
-            foreach (byte value in receivedBytes)
-            {
-                if ((value == BootloaderAck) ||
-                    (value == BootloaderWriteComplete) ||
-                    (value == BootloaderNack))
-                {
-                    statusByte = value;
-                    statusFound = true;
-                    break;
-                }
-            }
-
-            if (!statusFound)
+            if ((receivedBytes == null) ||
+                (receivedBytes.Length == 0))
             {
                 return;
             }
 
-            TaskCompletionSource<byte> waiter = null;
+            TaskCompletionSource<byte[]> waiterToComplete = null;
 
-            lock (statusResponseLock)
+            byte[] completedResponse = null;
+
+            lock (responseLock)
             {
-                if (pendingStatusResponse != null)
+                if (pendingResponseWaiter == null)
                 {
-                    waiter = pendingStatusResponse;
-                    pendingStatusResponse = null;
+                    return;
+                }
+
+                int missingByteCount = pendingResponseExpectedLength - pendingResponseBuffer.Count;
+
+                int byteCountToCopy =
+                    Math.Min(
+                        missingByteCount,
+                        receivedBytes.Length
+                    );
+
+                for (int i = 0; i < byteCountToCopy; i++)
+                {
+                    pendingResponseBuffer.Add(receivedBytes[i]);
+                }
+
+                if (pendingResponseBuffer.Count == pendingResponseExpectedLength)
+                {
+                    completedResponse = pendingResponseBuffer.ToArray();
+
+                    waiterToComplete = pendingResponseWaiter;
+
+                    pendingResponseWaiter = null;
+                    pendingResponseExpectedLength = 0;
+                    pendingResponseBuffer.Clear();
                 }
             }
 
-            waiter?.TrySetResult(statusByte);
+            waiterToComplete?.TrySetResult(completedResponse);
         }
 
-        private void CancelStatusResponseWaiter(
-            TaskCompletionSource<byte> waiter)
+        private void CancelResponseWaiter(
+            TaskCompletionSource<byte[]> waiter)
         {
-            lock (statusResponseLock)
+            lock (responseLock)
             {
-                if (ReferenceEquals(pendingStatusResponse, waiter))
+                if (ReferenceEquals(
+                        pendingResponseWaiter,
+                        waiter))
                 {
-                    pendingStatusResponse = null;
+                    pendingResponseWaiter = null;
+                    pendingResponseExpectedLength = 0;
+                    pendingResponseBuffer.Clear();
                 }
             }
         }
 
-        private async Task<byte?> SendCommandAndWaitForStatusAsync(
-            byte command,
-            byte[] payload,
-            int timeoutMilliseconds = 3000)
-        {
-            if (!serialPort1.IsOpen)
-            {
-                throw new InvalidOperationException("Serial port is not open.");
-            }
-
-            /*
-             * Remove stale response bytes before starting a new
-             * request-response transaction.
-             */
-            serialPort1.DiscardInBuffer();
-
-            TaskCompletionSource<byte> waiter =
-                CreateStatusResponseWaiter();
-
-            try
-            {
-                SendBootLoaderCommand(command, payload);
-
-                Task timeoutTask = Task.Delay(timeoutMilliseconds);
-
-                Task completedTask = await Task.WhenAny(
-                    waiter.Task,
-                    timeoutTask
-                );
-
-                if (completedTask != waiter.Task)
-                {
-                    return null;
-                }
-
-                return await waiter.Task;
-            }
-            finally
-            {
-                CancelStatusResponseWaiter(waiter);
-            }
-        }
-
-        private async Task<byte?> SendRawDataAndWaitForStatusAsync(byte[] data, int timeoutMilliseconds = 5000)
+        private async Task<byte[]>
+            SendCommandAndWaitForResponseAsync(
+                byte command,
+                byte[] payload,
+                int expectedResponseLength,
+                int timeoutMilliseconds)
         {
             if (!serialPort1.IsOpen)
             {
@@ -210,27 +207,15 @@ namespace STM32Flasher
                 );
             }
 
-            if ((data == null) || (data.Length == 0))
-            {
-                throw new ArgumentException(
-                    "The data block cannot be null or empty.",
-                    nameof(data)
-                );
-            }
+            serialPort1.DiscardInBuffer();
 
-            TaskCompletionSource<byte> waiter =
-                CreateStatusResponseWaiter();
+            TaskCompletionSource<byte[]> waiter = CreateResponseWaiter(expectedResponseLength);
 
             try
             {
-                /*
-                 * The waiter is created before writing the block so that
-                 * a fast bootloader response cannot be missed.
-                 */
-                serialPort1.Write(data, 0,data.Length);
+                SendBootLoaderCommand(command, payload);
 
-                Task timeoutTask =
-                    Task.Delay(timeoutMilliseconds);
+                Task timeoutTask = Task.Delay(timeoutMilliseconds);
 
                 Task completedTask =
                     await Task.WhenAny(
@@ -247,8 +232,93 @@ namespace STM32Flasher
             }
             finally
             {
-                CancelStatusResponseWaiter(waiter);
+                CancelResponseWaiter(waiter);
             }
+        }
+
+        private async Task<byte[]>
+            SendRawDataAndWaitForResponseAsync(
+                byte[] data,
+                int expectedResponseLength,
+                int timeoutMilliseconds)
+        {
+            if (!serialPort1.IsOpen)
+            {
+                throw new InvalidOperationException(
+                    "Serial port is not open."
+                );
+            }
+
+            if ((data == null) ||
+                (data.Length == 0))
+            {
+                throw new ArgumentException(
+                    "The data block cannot be null or empty.",
+                    nameof(data)
+                );
+            }
+
+            TaskCompletionSource<byte[]> waiter = CreateResponseWaiter(expectedResponseLength);
+
+            try
+            {
+                lock (serialWriteLock)
+                {
+                    serialPort1.Write(data, 0, data.Length);
+                }
+
+                Task timeoutTask = Task.Delay(timeoutMilliseconds);
+
+                Task completedTask = await Task.WhenAny(waiter.Task, timeoutTask);
+
+                if (completedTask != waiter.Task)
+                {
+                    return null;
+                }
+
+                return await waiter.Task;
+            }
+            finally
+            {
+                CancelResponseWaiter(waiter);
+            }
+        }
+
+        private async Task<byte?>
+            SendCommandAndWaitForStatusAsync(
+                byte command,
+                byte[] payload,
+                int timeoutMilliseconds = 3000)
+        {
+            byte[] response =
+                await SendCommandAndWaitForResponseAsync(
+                    command,
+                    payload,
+                    1,
+                    timeoutMilliseconds
+                );
+
+            if ((response == null) ||
+                (response.Length != 1))
+            {
+                return null;
+            }
+
+            return response[0];
+        }
+
+        private async Task<byte?>
+            SendRawDataAndWaitForStatusAsync(byte[] data, int timeoutMilliseconds = 5000)
+        {
+            byte[] response = await SendRawDataAndWaitForResponseAsync(data, 1, timeoutMilliseconds);
+
+            if ((response == null) ||
+                (response.Length != 1))
+            {
+                return null;
+            }
+
+            return response[0];
         }
 
         private byte[] CreateWriteBlockPacket(byte[] sourceData, int offset, int blockLength)
@@ -281,9 +351,9 @@ namespace STM32Flasher
              *
              * N        : 1 byte
              * Data     : 1-256 bytes
-             * Checksum : 1 byte
+             * CRC-32   : 4 bytes
              */
-            byte[] packet = new byte[blockLength + 2];
+            byte[] packet = new byte[1 + blockLength + BootloaderCrcSize];
 
             byte n = (byte)(blockLength - 1);
 
@@ -291,14 +361,14 @@ namespace STM32Flasher
 
             Array.Copy(sourceData, offset, packet, 1, blockLength);
 
-            byte checksum = n;
+            /*
+            * Block CRC input:
+            *
+            * N + Data
+            */
+            uint blockCrc = CalculateCrc32(packet, 0, blockLength + 1);
 
-            for (int i = 0; i < blockLength; i++)
-            {
-                checksum ^= packet[i + 1];
-            }
-
-            packet[packet.Length - 1] = checksum;
+            WriteUInt32BigEndian(packet, blockLength + 1, blockCrc);
 
             return packet;
         }
@@ -368,6 +438,136 @@ namespace STM32Flasher
             return payload;
         }
 
+        private static uint CalculateCrc32(byte[] data, int offset, int count)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            if ((offset < 0) ||
+                (count < 0) ||
+                (offset + count > data.Length))
+            {
+                throw new ArgumentOutOfRangeException();
+            }
+
+            uint crc = Crc32InitialValue;
+
+            for (int byteIndex = 0; byteIndex < count; byteIndex++)
+            {
+                crc ^= data[offset + byteIndex];
+
+                for (int bitIndex = 0; bitIndex < 8; bitIndex++)
+                {
+                    uint mask = 0U - (crc & 1U);
+
+                    crc = (crc >> 1) ^ (Crc32ReversedPolynomial & mask);
+                }
+            }
+
+            return crc ^ Crc32FinalXorValue;
+        }
+
+        private static uint CalculateCrc32(byte[] data)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            return CalculateCrc32(data, 0, data.Length);
+        }
+
+        private static void WriteUInt32BigEndian(byte[] destination, int offset, uint value)
+        {
+            if (destination == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(destination)
+                );
+            }
+
+            if ((offset < 0) ||
+                (offset + 4 > destination.Length))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset)
+                );
+            }
+
+            destination[offset] = (byte)((value >> 24) & 0xFFU);
+
+            destination[offset + 1] = (byte)((value >> 16) & 0xFFU);
+
+            destination[offset + 2] = (byte)((value >> 8) & 0xFFU);
+
+            destination[offset + 3] = (byte)(value & 0xFFU);
+        }
+
+        private static uint ReadUInt32BigEndian(byte[] source, int offset)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(source)
+                );
+            }
+
+            if ((offset < 0) ||
+                (offset + 4 > source.Length))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset)
+                );
+            }
+
+            return
+                ((uint)source[offset] << 24) |
+                ((uint)source[offset + 1] << 16) |
+                ((uint)source[offset + 2] << 8) |
+                source[offset + 3];
+        }
+
+        private async Task<uint?> GetMemoryCrc32Async(uint address, uint length)
+        {
+            if (!IsApplicationWriteRange(address, length))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(address),
+                    "The CRC range must remain inside the application area."
+                );
+            }
+
+            byte[] payload = new byte[8];
+
+            WriteUInt32BigEndian(payload, 0, address);
+
+            WriteUInt32BigEndian(payload, 4, length);
+
+            byte[] response =
+                await SendCommandAndWaitForResponseAsync(
+                    (byte)BootloaderCommand.GetChecksum,
+                    payload,
+                    CrcResponseLength,
+                    5000
+                );
+
+            if (response == null)
+            {
+                return null;
+            }
+
+            if (response[0] != BootloaderAck)
+            {
+                throw new InvalidOperationException(
+                    $"The bootloader rejected the checksum request. " +
+                    $"Response: 0x{response[0]:X2}"
+                );
+            }
+
+            return ReadUInt32BigEndian(response, 1);
+        }
         public STM32Flasher()
         {
             InitializeComponent();
@@ -477,16 +677,6 @@ namespace STM32Flasher
             }
         }
 
-        byte calculateCRC(byte[] data)
-        {
-            byte crc = 0x00;
-            foreach (byte b in data)
-            {
-                crc ^= b;   
-            }
-            return crc;
-        }
-
         private void SendBootLoaderCommand(byte command, byte[] payload)
         {
             if (!serialPort1.IsOpen)
@@ -534,7 +724,7 @@ namespace STM32Flasher
                 /*
                 * Complete an active ACK/NACK request before updating the UI.
                 */
-                CompleteStatusResponse(buffer);
+                CompletePendingResponse(buffer);
 
                 receivedData.AddRange(buffer);
 
@@ -862,38 +1052,31 @@ namespace STM32Flasher
                 return;
             }
 
-            byte[] payload = new byte[9];
+            uint expectedImageCrc = CalculateCrc32(binData);
 
             /*
-             * Destination address in big-endian format.
+             * Payload:
+             *
+             * Address          : 4 bytes
+             * Address checksum : 1 byte
+             * Image length     : 4 bytes
+             * Image CRC-32     : 4 bytes
              */
-            payload[0] = (byte)((address >> 24) & 0xFFU);
-            payload[1] = (byte)((address >> 16) & 0xFFU);
-            payload[2] = (byte)((address >> 8) & 0xFFU);
-            payload[3] = (byte)(address & 0xFFU);
+            byte[] payload = new byte[13];
+
+            WriteUInt32BigEndian(payload, 0, address);
 
             payload[4] = (byte)(payload[0] ^ payload[1] ^ payload[2] ^ payload[3]);
 
-            uint totalLength = imageLength;
+            WriteUInt32BigEndian(payload, 5, imageLength);
 
-            /*
-             * Complete image length in big-endian format.
-             */
-            payload[5] = (byte)((totalLength >> 24) & 0xFFU);
-            payload[6] = (byte)((totalLength >> 16) & 0xFFU);
-            payload[7] = (byte)((totalLength >> 8) & 0xFFU);
-            payload[8] = (byte)(totalLength & 0xFFU);
+            WriteUInt32BigEndian( payload, 9, expectedImageCrc);
 
             byte command = (byte)BootloaderCommand.WriteMemory;
 
-            /*
-             * Remove stale UART data before starting a new firmware
-             * write transaction.
-             */
             serialPort1.DiscardInBuffer();
 
-            byte? readyResponse =
-                await SendCommandAndWaitForStatusAsync(command, payload, 3000);
+            byte? readyResponse = await SendCommandAndWaitForStatusAsync(command, payload, 3000);
 
             if (!readyResponse.HasValue)
             {
@@ -907,23 +1090,12 @@ namespace STM32Flasher
                 return;
             }
 
-            if (readyResponse.Value == BootloaderNack)
-            {
-                MessageBox.Show(
-                    "The bootloader rejected the Write Memory command.",
-                    "Write Command Rejected",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-
-                return;
-            }
-
             if (readyResponse.Value != BootloaderAck)
             {
                 MessageBox.Show(
-                    $"Unexpected bootloader response: 0x{readyResponse.Value:X2}",
-                    "Protocol Error",
+                    $"The bootloader rejected the Write Memory command.\n\n" +
+                    $"Response: 0x{readyResponse.Value:X2}",
+                    "Write Command Rejected",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error
                 );
@@ -944,18 +1116,21 @@ namespace STM32Flasher
 
                 bool isFinalBlock = (offset + currentBlockLength) == binData.Length;
 
-                byte[] blockPacket =
-                    CreateWriteBlockPacket(binData, offset, currentBlockLength);
+                byte[] blockPacket = CreateWriteBlockPacket(binData, offset, currentBlockLength);
 
                 blockNumber++;
 
                 byte? blockResponse =
-                    await SendRawDataAndWaitForStatusAsync(blockPacket, 5000);
+                    await SendRawDataAndWaitForStatusAsync(
+                        blockPacket,
+                        isFinalBlock ? 10000 : 5000
+                    );
 
                 if (!blockResponse.HasValue)
                 {
                     MessageBox.Show(
-                        $"No response was received for block {blockNumber} of {totalBlocks}.",
+                        $"No response was received for block " +
+                        $"{blockNumber} of {totalBlocks}.",
                         "Firmware Write Timeout",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error
@@ -966,9 +1141,16 @@ namespace STM32Flasher
 
                 if (blockResponse.Value == BootloaderNack)
                 {
+                    string failureReason =
+                        isFinalBlock
+                            ? "The complete firmware CRC-32 verification failed."
+                            : "The firmware block was rejected.";
+
                     MessageBox.Show(
-                        $"The bootloader rejected block {blockNumber} of {totalBlocks}.",
-                        "Firmware Write Failed",
+                        $"{failureReason}\n\n" +
+                        $"Block: {blockNumber} of {totalBlocks}\n" +
+                        $"Expected image CRC-32: 0x{expectedImageCrc:X8}",
+                        "Firmware Verification Failed",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error
                     );
@@ -991,30 +1173,23 @@ namespace STM32Flasher
                         return;
                     }
                 }
-                else
+                else if (blockResponse.Value != BootloaderAck)
                 {
-                    if (blockResponse.Value != BootloaderAck)
-                    {
-                        MessageBox.Show(
-                            $"Block {blockNumber} returned an unexpected response: " +
-                            $"0x{blockResponse.Value:X2}",
-                            "Firmware Protocol Error",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error
-                        );
+                    MessageBox.Show(
+                        $"Block {blockNumber} returned an unexpected response: " +
+                        $"0x{blockResponse.Value:X2}",
+                        "Firmware Protocol Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
 
-                        return;
-                    }
+                    return;
                 }
 
                 offset += currentBlockLength;
 
                 int progress = (int)((offset * 100L) / binData.Length);
 
-                /*
-                 * prgBarStatus is currently also used for connection status.
-                 * It is temporarily reused to display firmware write progress.
-                 */
                 prgBarStatus.Value =
                     Math.Max(
                         prgBarStatus.Minimum,
@@ -1026,9 +1201,10 @@ namespace STM32Flasher
             }
 
             MessageBox.Show(
-                $"Firmware was written successfully.\n\n" +
+                $"Firmware was written and verified successfully.\n\n" +
                 $"Bytes written: {binData.Length}\n" +
-                $"Blocks written: {totalBlocks}",
+                $"Blocks written: {totalBlocks}\n" +
+                $"CRC-32: 0x{expectedImageCrc:X8}",
                 "Firmware Write Complete",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information

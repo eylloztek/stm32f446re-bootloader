@@ -33,6 +33,22 @@
 #define UNKNOWN							0x99
 
 /*
+ * CRC-32/ISO-HDLC parameters.
+ *
+ * Normal polynomial  : 0x04C11DB7
+ * Reversed polynomial: 0xEDB88320
+ * Initial value      : 0xFFFFFFFF
+ * Final XOR value    : 0xFFFFFFFF
+ */
+#define CRC32_REVERSED_POLYNOMIAL            0xEDB88320UL
+#define CRC32_INITIAL_VALUE                  0xFFFFFFFFUL
+#define CRC32_FINAL_XOR_VALUE                0xFFFFFFFFUL
+
+#define BOOTLOADER_CRC_SIZE                  4U
+#define BOOTLOADER_STATUS_RESPONSE_SIZE      1U
+#define BOOTLOADER_CRC_RESPONSE_SIZE         5U
+
+/*
  * Maximum number of bytes in the command body.
  *
  * The command body contains:
@@ -46,10 +62,13 @@
 /*
  * Complete command frame:
  *
- * Header + Length + Command body + Checksum
+ * Header + Length + Command body + CRC-32
  */
-#define BOOTLOADER_RX_BUFFER_SIZE           \
-    (BOOTLOADER_MAX_COMMAND_LENGTH + 3U)
+#define BOOTLOADER_FRAME_OVERHEAD            \
+    (2U + BOOTLOADER_CRC_SIZE)
+
+#define BOOTLOADER_RX_BUFFER_SIZE            \
+    (BOOTLOADER_MAX_COMMAND_LENGTH + BOOTLOADER_FRAME_OVERHEAD)
 
 #define BOOTLOADER_MIN_COMMAND_LENGTH       1U
 #define BOOTLOADER_FRAME_TIMEOUT_MS         250U
@@ -120,7 +139,8 @@ void handleWriteProtectUnprotect(void);
 void handleReadoutProtectUnprotect(void);
 void handleResetOperation(void);
 void handleUnknownCommand(void);
-uint8_t calculateCRC(const uint8_t *data, uint16_t startIndex, uint16_t length);
+void handleGetChecksum(void);
+uint32_t calculateCrc32(const uint8_t *data, uint32_t length);
 uint8_t isRangeInsideMemoryRegion(uint32_t address, uint32_t length,
 		uint32_t regionStart, uint32_t regionEnd);
 uint8_t verifyReadRange(uint32_t address, uint32_t length);
