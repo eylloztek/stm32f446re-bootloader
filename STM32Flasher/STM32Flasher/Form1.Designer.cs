@@ -330,7 +330,7 @@
             // chBoxWRP7
             // 
             this.chBoxWRP7.AutoSize = true;
-            this.chBoxWRP7.Location = new System.Drawing.Point(519, 570);
+            this.chBoxWRP7.Location = new System.Drawing.Point(741, 567);
             this.chBoxWRP7.Name = "chBoxWRP7";
             this.chBoxWRP7.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP7.TabIndex = 44;
@@ -340,7 +340,7 @@
             // chBoxWRP6
             // 
             this.chBoxWRP6.AutoSize = true;
-            this.chBoxWRP6.Location = new System.Drawing.Point(393, 570);
+            this.chBoxWRP6.Location = new System.Drawing.Point(615, 567);
             this.chBoxWRP6.Name = "chBoxWRP6";
             this.chBoxWRP6.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP6.TabIndex = 43;
@@ -350,7 +350,7 @@
             // chBoxWRP5
             // 
             this.chBoxWRP5.AutoSize = true;
-            this.chBoxWRP5.Location = new System.Drawing.Point(283, 570);
+            this.chBoxWRP5.Location = new System.Drawing.Point(505, 567);
             this.chBoxWRP5.Name = "chBoxWRP5";
             this.chBoxWRP5.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP5.TabIndex = 42;
@@ -360,7 +360,7 @@
             // chBoxWRP4
             // 
             this.chBoxWRP4.AutoSize = true;
-            this.chBoxWRP4.Location = new System.Drawing.Point(169, 570);
+            this.chBoxWRP4.Location = new System.Drawing.Point(391, 567);
             this.chBoxWRP4.Name = "chBoxWRP4";
             this.chBoxWRP4.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP4.TabIndex = 41;
@@ -370,7 +370,7 @@
             // chBoxWRP3
             // 
             this.chBoxWRP3.AutoSize = true;
-            this.chBoxWRP3.Location = new System.Drawing.Point(519, 525);
+            this.chBoxWRP3.Location = new System.Drawing.Point(295, 567);
             this.chBoxWRP3.Name = "chBoxWRP3";
             this.chBoxWRP3.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP3.TabIndex = 40;
@@ -380,7 +380,7 @@
             // chBoxWRP2
             // 
             this.chBoxWRP2.AutoSize = true;
-            this.chBoxWRP2.Location = new System.Drawing.Point(393, 525);
+            this.chBoxWRP2.Location = new System.Drawing.Point(169, 567);
             this.chBoxWRP2.Name = "chBoxWRP2";
             this.chBoxWRP2.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP2.TabIndex = 39;
@@ -390,7 +390,7 @@
             // chBoxWRP1
             // 
             this.chBoxWRP1.AutoSize = true;
-            this.chBoxWRP1.Location = new System.Drawing.Point(283, 525);
+            this.chBoxWRP1.Location = new System.Drawing.Point(505, 519);
             this.chBoxWRP1.Name = "chBoxWRP1";
             this.chBoxWRP1.Size = new System.Drawing.Size(81, 24);
             this.chBoxWRP1.TabIndex = 38;

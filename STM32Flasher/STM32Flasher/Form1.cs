@@ -14,7 +14,9 @@ namespace STM32Flasher
 {
     public partial class STM32Flasher : Form
     {
-        List<byte> receivedData = new List<byte>();
+        private readonly object readMemoryDataLock = new object();
+        private byte[] lastReadMemoryData = Array.Empty<byte>();
+
         private const byte BootloaderAck = 0x79;
         private const byte BootloaderWriteComplete = 0x7A;
         private const byte BootloaderNack = 0x1F;
@@ -40,6 +42,7 @@ namespace STM32Flasher
         private readonly List<byte> pendingResponseBuffer = new List<byte>();
 
         private int pendingResponseExpectedLength;
+        private bool pendingResponseCompletesOnSingleByteNack;
 
         private const byte BootloaderHeader = 0x7F;
         private const int MaximumCommandLength = 32;
@@ -52,6 +55,37 @@ namespace STM32Flasher
 
         private const int BootloaderCrcSize = 4;
         private const int CrcResponseLength = 5;
+        private const byte WrpOperationGetStatus = 0x00;
+        private const byte WrpOperationSetMask = 0x01;
+
+        private const byte FlashProtectionModeWriteProtection = 0x00;
+        private const byte FlashProtectionModePcrop = 0x01;
+
+        private const byte WrpBootloaderSectorMask = 0x03;
+        private const byte WrpApplicationSectorMask = 0xFC;
+
+        private const int WrpResponseLength = 3;
+
+        private const byte ExpectedBootloaderVersion = 0x10;
+
+        private sealed class FlashProtectionStatus
+        {
+            public FlashProtectionStatus(
+                byte responseStatus,
+                byte protectionMode,
+                byte activeMask)
+            {
+                ResponseStatus = responseStatus;
+                ProtectionMode = protectionMode;
+                ActiveMask = activeMask;
+            }
+
+            public byte ResponseStatus { get; }
+
+            public byte ProtectionMode { get; }
+
+            public byte ActiveMask { get; }
+        }
 
         private byte[] CreateBootloaderCommandPacket(byte command, byte[] payload)
         {
@@ -99,7 +133,9 @@ namespace STM32Flasher
             return packet;
         }
 
-        private TaskCompletionSource<byte[]> CreateResponseWaiter(int expectedLength)
+        private TaskCompletionSource<byte[]> CreateResponseWaiter(
+            int expectedLength,
+            bool completeOnSingleByteNack)
         {
             if (expectedLength <= 0)
             {
@@ -118,6 +154,8 @@ namespace STM32Flasher
                 }
 
                 pendingResponseExpectedLength = expectedLength;
+                pendingResponseCompletesOnSingleByteNack =
+                    completeOnSingleByteNack;
 
                 pendingResponseBuffer.Clear();
 
@@ -149,28 +187,51 @@ namespace STM32Flasher
                     return;
                 }
 
-                int missingByteCount = pendingResponseExpectedLength - pendingResponseBuffer.Count;
-
-                int byteCountToCopy =
-                    Math.Min(
-                        missingByteCount,
-                        receivedBytes.Length
-                    );
-
-                for (int i = 0; i < byteCountToCopy; i++)
+                if (pendingResponseCompletesOnSingleByteNack &&
+                    (pendingResponseBuffer.Count == 0) &&
+                    (receivedBytes[0] == BootloaderNack))
                 {
-                    pendingResponseBuffer.Add(receivedBytes[i]);
-                }
-
-                if (pendingResponseBuffer.Count == pendingResponseExpectedLength)
-                {
-                    completedResponse = pendingResponseBuffer.ToArray();
+                    completedResponse =
+                        new[] { BootloaderNack };
 
                     waiterToComplete = pendingResponseWaiter;
 
                     pendingResponseWaiter = null;
                     pendingResponseExpectedLength = 0;
+                    pendingResponseCompletesOnSingleByteNack = false;
                     pendingResponseBuffer.Clear();
+                }
+                else
+                {
+                    int missingByteCount =
+                        pendingResponseExpectedLength -
+                        pendingResponseBuffer.Count;
+
+                    int byteCountToCopy =
+                        Math.Min(
+                            missingByteCount,
+                            receivedBytes.Length
+                        );
+
+                    for (int i = 0; i < byteCountToCopy; i++)
+                    {
+                        pendingResponseBuffer.Add(receivedBytes[i]);
+                    }
+
+                    if (pendingResponseBuffer.Count ==
+                        pendingResponseExpectedLength)
+                    {
+                        completedResponse =
+                            pendingResponseBuffer.ToArray();
+
+                        waiterToComplete = pendingResponseWaiter;
+
+                        pendingResponseWaiter = null;
+                        pendingResponseExpectedLength = 0;
+                        pendingResponseCompletesOnSingleByteNack =
+                            false;
+                        pendingResponseBuffer.Clear();
+                    }
                 }
             }
 
@@ -188,6 +249,7 @@ namespace STM32Flasher
                 {
                     pendingResponseWaiter = null;
                     pendingResponseExpectedLength = 0;
+                    pendingResponseCompletesOnSingleByteNack = false;
                     pendingResponseBuffer.Clear();
                 }
             }
@@ -198,7 +260,8 @@ namespace STM32Flasher
                 byte command,
                 byte[] payload,
                 int expectedResponseLength,
-                int timeoutMilliseconds)
+                int timeoutMilliseconds,
+                bool completeOnSingleByteNack = false)
         {
             if (!serialPort1.IsOpen)
             {
@@ -209,7 +272,11 @@ namespace STM32Flasher
 
             serialPort1.DiscardInBuffer();
 
-            TaskCompletionSource<byte[]> waiter = CreateResponseWaiter(expectedResponseLength);
+            TaskCompletionSource<byte[]> waiter =
+                CreateResponseWaiter(
+                    expectedResponseLength,
+                    completeOnSingleByteNack
+                );
 
             try
             {
@@ -258,7 +325,11 @@ namespace STM32Flasher
                 );
             }
 
-            TaskCompletionSource<byte[]> waiter = CreateResponseWaiter(expectedResponseLength);
+            TaskCompletionSource<byte[]> waiter =
+                CreateResponseWaiter(
+                    expectedResponseLength,
+                    false
+                );
 
             try
             {
@@ -550,7 +621,8 @@ namespace STM32Flasher
                     (byte)BootloaderCommand.GetChecksum,
                     payload,
                     CrcResponseLength,
-                    5000
+                    5000,
+                    true
                 );
 
             if (response == null)
@@ -566,7 +638,219 @@ namespace STM32Flasher
                 );
             }
 
+            if (response.Length != CrcResponseLength)
+            {
+                throw new InvalidOperationException(
+                    $"The checksum response length is invalid. " +
+                    $"Expected: {CrcResponseLength}, " +
+                    $"received: {response.Length}."
+                );
+            }
+
             return ReadUInt32BigEndian(response, 1);
+        }
+
+        private CheckBox[] GetWriteProtectionCheckBoxes()
+        {
+            return new[]
+            {
+                chBoxWRP0,
+                chBoxWRP1,
+                chBoxWRP2,
+                chBoxWRP3,
+                chBoxWRP4,
+                chBoxWRP5,
+                chBoxWRP6,
+                chBoxWRP7
+            };
+        }
+
+        private byte GetRequestedWriteProtectionMask()
+        {
+            CheckBox[] checkBoxes = GetWriteProtectionCheckBoxes();
+
+            byte mask = 0x00;
+
+            for (int sector = 0; sector < checkBoxes.Length; sector++)
+            {
+                if (checkBoxes[sector].Checked)
+                {
+                    mask |= (byte)(1 << sector);
+                }
+            }
+
+            /*
+             * Enforce the bootloader protection policy in the GUI
+             * as a second layer of validation.
+             */
+            mask |= WrpBootloaderSectorMask;
+
+            return mask;
+        }
+
+        private void ApplyWriteProtectionMaskToUi(byte protectedSectorMask)
+        {
+            CheckBox[] checkBoxes = GetWriteProtectionCheckBoxes();
+
+            for (int sector = 0; sector < checkBoxes.Length; sector++)
+            {
+                bool isProtected = (protectedSectorMask & (1 << sector)) != 0;
+
+                checkBoxes[sector].Checked = isProtected;
+            }
+
+            /*
+             * The target state always keeps the bootloader sectors
+             * protected, even when an older device configuration reports
+             * that they are currently unprotected.
+             */
+            chBoxWRP0.Checked = true;
+            chBoxWRP1.Checked = true;
+        }
+
+        private static string FormatWriteProtectionSectors(byte sectorMask)
+        {
+            List<string> sectors = new List<string>();
+
+            for (int sector = 0; sector < 8; sector++)
+            {
+                if ((sectorMask & (1 << sector)) != 0)
+                {
+                    sectors.Add($"Sector {sector}");
+                }
+            }
+
+            return sectors.Count == 0
+                ? "None"
+                : string.Join(", ", sectors);
+        }
+
+        private static string GetFlashProtectionModeName(
+            byte protectionMode)
+        {
+            switch (protectionMode)
+            {
+                case FlashProtectionModeWriteProtection:
+                    return "Write Protection";
+
+                case FlashProtectionModePcrop:
+                    return "PCROP";
+
+                default:
+                    return $"Unknown (0x{protectionMode:X2})";
+            }
+        }
+
+        private async Task<FlashProtectionStatus>
+            GetWriteProtectionStatusAsync()
+        {
+            byte[] payload = { WrpOperationGetStatus, 0x00 };
+
+            byte[] response =
+                await SendCommandAndWaitForResponseAsync(
+                    (byte)BootloaderCommand.WriteProtect,
+                    payload,
+                    WrpResponseLength,
+                    3000
+                );
+
+            if ((response == null) ||
+                (response.Length != WrpResponseLength))
+            {
+                return null;
+            }
+
+            FlashProtectionStatus protectionStatus =
+                new FlashProtectionStatus(
+                    response[0],
+                    response[1],
+                    response[2]
+                );
+
+            if (protectionStatus.ResponseStatus != BootloaderAck)
+            {
+                throw new InvalidOperationException(
+                    $"The bootloader rejected the Flash protection " +
+                    $"status request.\n\n" +
+                    $"Status: 0x{protectionStatus.ResponseStatus:X2}\n" +
+                    $"Protection mode: " +
+                    $"{GetFlashProtectionModeName(protectionStatus.ProtectionMode)}\n" +
+                    $"Reported mask: 0x{protectionStatus.ActiveMask:X2}"
+                );
+            }
+
+            if ((protectionStatus.ProtectionMode !=
+                    FlashProtectionModeWriteProtection) &&
+                (protectionStatus.ProtectionMode !=
+                    FlashProtectionModePcrop))
+            {
+                throw new InvalidOperationException(
+                    $"The bootloader returned an unsupported Flash " +
+                    $"protection mode: " +
+                    $"0x{protectionStatus.ProtectionMode:X2}."
+                );
+            }
+
+            return protectionStatus;
+        }
+
+        private async Task<byte[]> SetWriteProtectionMaskAsync(byte protectedSectorMask)
+        {
+            if ((protectedSectorMask & WrpBootloaderSectorMask) != WrpBootloaderSectorMask)
+            {
+                throw new ArgumentException(
+                    "Sector 0 and Sector 1 must remain write-protected.",
+                    nameof(protectedSectorMask)
+                );
+            }
+
+            byte[] payload = { WrpOperationSetMask, protectedSectorMask };
+
+            return await SendCommandAndWaitForResponseAsync(
+                (byte)BootloaderCommand.WriteProtect,
+                payload,
+                WrpResponseLength,
+                10000
+            );
+        }
+
+        private async Task<bool> WaitForBootloaderAfterResetAsync()
+        {
+            const int maximumAttempts = 8;
+
+            for (int attempt = 0; attempt < maximumAttempts; attempt++)
+            {
+                await Task.Delay(400);
+
+                try
+                {
+                    byte[] response =
+                        await SendCommandAndWaitForResponseAsync(
+                            (byte)BootloaderCommand.GetVersion,
+                            Array.Empty<byte>(),
+                            2,
+                            1000,
+                            true
+                        );
+
+                    if ((response != null) &&
+                        (response.Length == 2) &&
+                        (response[0] == BootloaderAck) &&
+                        (response[1] == ExpectedBootloaderVersion))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    /*
+                     * The MCU may still be resetting.
+                     * Retry until the maximum attempt count is reached.
+                     */
+                }
+            }
+
+            return false;
         }
         public STM32Flasher()
         {
@@ -576,6 +860,21 @@ namespace STM32Flasher
             this.MinimizeBox = true;
             grpBoxCommands.Enabled = false;
             grpBoxMode.Enabled = false;
+
+            /*
+            * The custom bootloader protocol never permits write protection
+            * to be removed from Sector 0 or Sector 1.
+            */
+            chBoxWRP0.Checked = true;
+            chBoxWRP0.Enabled = false;
+            chBoxWRP0.Text = "Sector 0 (Bootloader - Required)";
+
+            chBoxWRP1.Checked = true;
+            chBoxWRP1.Enabled = false;
+            chBoxWRP1.Text = "Sector 1 (Bootloader - Required)";
+
+            btnWriteProtect.Text =
+                "Apply Write Protection";
         }
 
         public enum BootloaderCommand : byte
@@ -583,7 +882,7 @@ namespace STM32Flasher
             GetHelp = 0x00,
             GetVersion = 0x01,
             GetID = 0x02,
-            ReadMemory = 0x011,
+            ReadMemory = 0x11,
             Go = 0x21,
             WriteMemory = 0x31,
             Erase = 0x43,
@@ -633,15 +932,48 @@ namespace STM32Flasher
 
         private void btnConnect_Click(object sender, EventArgs e)
         {
-            serialPort1.PortName = cBoxComPort.Text;
-            serialPort1.BaudRate = Int32.Parse(cBoxBaudrate.Text);
-            serialPort1.DataBits = 8;
-            serialPort1.Parity = (Parity)Enum.Parse(typeof(Parity), cBoxParity.Text);
-            serialPort1.StopBits = (StopBits)Enum.Parse(typeof(StopBits), cBoxStopBits.Text);
-
             try
             {
+                if (string.IsNullOrWhiteSpace(cBoxComPort.Text))
+                {
+                    throw new InvalidOperationException(
+                        "Please select a COM port."
+                    );
+                }
+
+                if (!Int32.TryParse(
+                        cBoxBaudrate.Text,
+                        out int baudRate) ||
+                    (baudRate <= 0))
+                {
+                    throw new InvalidOperationException(
+                        "Please select a valid baud rate."
+                    );
+                }
+
+                serialPort1.PortName = cBoxComPort.Text;
+                serialPort1.BaudRate = baudRate;
+                serialPort1.DataBits = 8;
+                serialPort1.Parity =
+                    (Parity)Enum.Parse(
+                        typeof(Parity),
+                        cBoxParity.Text
+                    );
+                serialPort1.StopBits =
+                    (StopBits)Enum.Parse(
+                        typeof(StopBits),
+                        cBoxStopBits.Text
+                    );
+
                 serialPort1.Open();
+                serialPort1.DiscardInBuffer();
+                serialPort1.DiscardOutBuffer();
+
+                lock (readMemoryDataLock)
+                {
+                    lastReadMemoryData = Array.Empty<byte>();
+                }
+
                 btnConnect.Enabled = false;
                 btnDisconnect.Enabled = true;
                 cBoxComPort.Enabled = false;
@@ -651,18 +983,28 @@ namespace STM32Flasher
                 grpBoxCommands.Enabled = true;
                 grpBoxMode.Enabled = true;
             }
-            catch (Exception ex){
+            catch (Exception ex)
+            {
+                if (serialPort1.IsOpen)
+                {
+                    serialPort1.Close();
+                }
+
                 MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                btnConnect.Enabled=true;
-                btnDisconnect.Enabled=false;
+                btnConnect.Enabled = true;
+                btnDisconnect.Enabled = false;
+                cBoxComPort.Enabled = true;
                 lblConnectionStatus.Text = "Unsuccessful";
+                prgBarStatus.Value = 0;
+                grpBoxCommands.Enabled = false;
+                grpBoxMode.Enabled = false;
             }
 
         }
 
         private void btnDisconnect_Click(object sender, EventArgs e)
         {
-            
+
             if (serialPort1.IsOpen)
             {
                 serialPort1.Close();
@@ -674,6 +1016,11 @@ namespace STM32Flasher
                 txtReceiveMessage.Text = string.Empty;
                 grpBoxCommands.Enabled = false;
                 grpBoxMode.Enabled = false;
+
+                lock (readMemoryDataLock)
+                {
+                    lastReadMemoryData = Array.Empty<byte>();
+                }
             }
         }
 
@@ -709,7 +1056,7 @@ namespace STM32Flasher
                 }
 
                 byte[] buffer = new byte[bytesToRead];
-                int bytesRead = serialPort1.Read(buffer, 0,buffer.Length);
+                int bytesRead = serialPort1.Read(buffer, 0, buffer.Length);
 
                 if (bytesRead <= 0)
                 {
@@ -726,8 +1073,6 @@ namespace STM32Flasher
                 */
                 CompletePendingResponse(buffer);
 
-                receivedData.AddRange(buffer);
-
                 string hexOutput = BitConverter.ToString(buffer).Replace("-", " ");
 
                 BeginInvoke(new Action(() =>
@@ -742,7 +1087,8 @@ namespace STM32Flasher
                     txtReceiveMessage.ScrollToCaret();
                 }));
 
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 BeginInvoke(new Action(() =>
                 {
@@ -779,7 +1125,7 @@ namespace STM32Flasher
             SendBootLoaderCommand(cmd, new byte[0]);
         }
 
-        private void sendReadMemoryData(uint address, int length)
+        private async Task ReadMemoryAsync(uint address, int length)
         {
 
             if ((length < 1) || (length > MaximumReadLength))
@@ -792,7 +1138,7 @@ namespace STM32Flasher
 
             byte[] data = new byte[7];
             //address -> msb to lsb
-            data[0] = (byte)((address>>24) & 0xFF); //msb
+            data[0] = (byte)((address >> 24) & 0xFF); //msb
             data[1] = (byte)((address >> 16) & 0xFF);
             data[2] = (byte)((address >> 8) & 0xFF);
             data[3] = (byte)(address & 0xFF);
@@ -805,10 +1151,63 @@ namespace STM32Flasher
             data[6] = (byte)(n ^ 0xFF);   // or: (byte)~n
 
             byte cmd = (byte)BootloaderCommand.ReadMemory;
-            SendBootLoaderCommand(cmd, data);
+
+            lock (readMemoryDataLock)
+            {
+                lastReadMemoryData = Array.Empty<byte>();
+            }
+
+            byte[] response =
+                await SendCommandAndWaitForResponseAsync(
+                    cmd,
+                    data,
+                    length + 1,
+                    5000,
+                    true
+                );
+
+            if (response == null)
+            {
+                throw new TimeoutException(
+                    "The bootloader did not return the complete " +
+                    "Read Memory response."
+                );
+            }
+
+            if (response[0] != BootloaderAck)
+            {
+                throw new InvalidOperationException(
+                    $"The bootloader rejected the Read Memory request. " +
+                    $"Response: 0x{response[0]:X2}"
+                );
+            }
+
+            if (response.Length != length + 1)
+            {
+                throw new InvalidOperationException(
+                    $"The Read Memory response length is invalid. " +
+                    $"Expected: {length + 1}, " +
+                    $"received: {response.Length}."
+                );
+            }
+
+            byte[] memoryData = new byte[length];
+
+            Array.Copy(
+                response,
+                1,
+                memoryData,
+                0,
+                length
+            );
+
+            lock (readMemoryDataLock)
+            {
+                lastReadMemoryData = memoryData;
+            }
         }
 
-        private void btnReadMemory_Click(object sender, EventArgs e)
+        private async void btnReadMemory_Click(object sender, EventArgs e)
         {
 
             if (string.IsNullOrWhiteSpace(txtAddress.Text) || string.IsNullOrWhiteSpace(txtLength.Text))
@@ -873,7 +1272,19 @@ namespace STM32Flasher
                     return;
                 }
 
-                sendReadMemoryData(address, length);
+                btnReadMemory.Enabled = false;
+
+                await ReadMemoryAsync(address, length);
+
+                MessageBox.Show(
+                    $"{length} bytes were read successfully from " +
+                    $"0x{address:X8}.\n\n" +
+                    $"Use Save to write the latest Read Memory result " +
+                    $"to a binary file.",
+                    "Read Memory Complete",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
             }
             catch (FormatException)
             {
@@ -902,14 +1313,32 @@ namespace STM32Flasher
                     MessageBoxIcon.Error
                 );
             }
+            finally
+            {
+                btnReadMemory.Enabled = true;
+            }
 
         }
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            if (receivedData == null || receivedData.Count == 0)
+            byte[] dataToSave;
+
+            lock (readMemoryDataLock)
             {
-                MessageBox.Show("No data received to save.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                dataToSave =
+                    (byte[])lastReadMemoryData.Clone();
+            }
+
+            if (dataToSave.Length == 0)
+            {
+                MessageBox.Show(
+                    "No Read Memory data is available to save.",
+                    "Warning",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
                 return;
             }
 
@@ -923,10 +1352,14 @@ namespace STM32Flasher
                 {
                     try
                     {
-                        byte[] dataToSave = receivedData.Skip(1).ToArray();
                         File.WriteAllBytes(saveFileDialog.FileName, dataToSave);
                         MessageBox.Show("Data saved successfully.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        receivedData.Clear();
+
+                        lock (readMemoryDataLock)
+                        {
+                            lastReadMemoryData = Array.Empty<byte>();
+                        }
+
                         txtReceiveMessage.Text = "";
                     }
                     catch (Exception ex)
@@ -1002,9 +1435,35 @@ namespace STM32Flasher
 
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                txtBrowseFile.Text = openFileDialog.FileName;
-                binFilePath = txtBrowseFile.Text;
-                binData = File.ReadAllBytes(binFilePath);
+                try
+                {
+                    byte[] selectedBinary =
+                        File.ReadAllBytes(openFileDialog.FileName);
+
+                    if (selectedBinary.Length == 0)
+                    {
+                        throw new InvalidDataException(
+                            "The selected binary file is empty."
+                        );
+                    }
+
+                    txtBrowseFile.Text = openFileDialog.FileName;
+                    binFilePath = openFileDialog.FileName;
+                    binData = selectedBinary;
+                }
+                catch (Exception ex)
+                {
+                    txtBrowseFile.Text = string.Empty;
+                    binFilePath = null;
+                    binData = null;
+
+                    MessageBox.Show(
+                        ex.Message,
+                        "Binary File Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                }
             }
         }
 
@@ -1070,7 +1529,7 @@ namespace STM32Flasher
 
             WriteUInt32BigEndian(payload, 5, imageLength);
 
-            WriteUInt32BigEndian( payload, 9, expectedImageCrc);
+            WriteUInt32BigEndian(payload, 9, expectedImageCrc);
 
             byte command = (byte)BootloaderCommand.WriteMemory;
 
@@ -1211,7 +1670,7 @@ namespace STM32Flasher
             );
         }
 
-        private async void btnWriteMem_Click(object sender,EventArgs e)
+        private async void btnWriteMem_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(txtWriteMem.Text) ||
                 string.IsNullOrWhiteSpace(txtBrowseFile.Text))
@@ -1242,7 +1701,7 @@ namespace STM32Flasher
             {
                 string addressText = txtWriteMem.Text.Trim();
 
-                if (addressText.StartsWith("0x",StringComparison.OrdinalIgnoreCase))
+                if (addressText.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 {
                     addressText = addressText.Substring(2);
                 }
@@ -1297,9 +1756,8 @@ namespace STM32Flasher
             /*
              * Defense in depth:
              *
-             * Bu kontroller UI üzerinde disabled olsa bile,
-             * herhangi bir kod değişikliği veya yanlış durum nedeniyle
-             * işaretlenmişlerse komut gönderilmez.
+             * Do not send an erase command if a disabled bootloader-sector
+             * control becomes selected because of a UI or code-state error.
              */
             if (chBoxSelect0.Checked ||
                 chBoxSelect1.Checked ||
@@ -1392,45 +1850,326 @@ namespace STM32Flasher
             sendEraseData();
         }
 
-        private void sendWriteProtectUnprotect()
+        private async Task ApplyWriteProtectionAsync()
         {
-            List<byte> sectorsToProtect = new List<byte>();
-
-            if (chBoxWRP0.Checked) sectorsToProtect.Add(0x00);
-            if (chBoxWRP1.Checked) sectorsToProtect.Add(0x01);
-            if (chBoxWRP2.Checked) sectorsToProtect.Add(0x02);
-            if (chBoxWRP3.Checked) sectorsToProtect.Add(0x03);
-            if (chBoxWRP4.Checked) sectorsToProtect.Add(0x04);
-            if (chBoxWRP5.Checked) sectorsToProtect.Add(0x05);
-            if (chBoxWRP6.Checked) sectorsToProtect.Add(0x06);
-            if (chBoxWRP7.Checked) sectorsToProtect.Add(0x07);
-
-            if (sectorsToProtect.Count > 0)
+            if (!serialPort1.IsOpen)
             {
-                byte N = (byte)(sectorsToProtect.Count - 1);
-                List<byte> payload = new List<byte> { N };
-                payload.AddRange(sectorsToProtect);
+                MessageBox.Show(
+                    "Serial port is not open.",
+                    "Connection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
 
-                byte cmd = (byte)BootloaderCommand.WriteProtect;
-                SendBootLoaderCommand(cmd, payload.ToArray());
-
-                MessageBox.Show("Checked sectors have been write-protected.");
+                return;
             }
-            else
-            {
-                byte N = (byte)(sectorsToProtect.Count - 1);
-                List<byte> payload = new List<byte> { N };
-                payload.AddRange(sectorsToProtect);
 
-                byte cmd = (byte)BootloaderCommand.WriteProtect;
-                SendBootLoaderCommand(cmd, payload.ToArray());
-                MessageBox.Show("All sectors have been set to unprotected.");
+            FlashProtectionStatus currentStatus =
+                await GetWriteProtectionStatusAsync();
+
+            if (currentStatus == null)
+            {
+                MessageBox.Show(
+                    "The bootloader did not return the current " +
+                    "Flash protection status.",
+                    "Flash Protection Timeout",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+
+                return;
+            }
+
+            if (currentStatus.ProtectionMode !=
+                FlashProtectionModeWriteProtection)
+            {
+                string protectionModeName =
+                    GetFlashProtectionModeName(
+                        currentStatus.ProtectionMode
+                    );
+
+                MessageBox.Show(
+                    $"The target is in {protectionModeName} mode.\n\n" +
+                    $"Active protection mask: " +
+                    $"0x{currentStatus.ActiveMask:X2}\n" +
+                    $"Active sectors: " +
+                    $"{FormatWriteProtectionSectors(currentStatus.ActiveMask)}\n\n" +
+                    $"Normal write-protection changes are disabled for " +
+                    $"safety. Return SPRMOD to normal Write Protection " +
+                    $"mode with an external programming tool before " +
+                    $"changing this mask.",
+                    "Write Protection Unavailable",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                );
+
+                return;
+            }
+
+            byte currentMask = currentStatus.ActiveMask;
+
+            byte requestedMask = GetRequestedWriteProtectionMask();
+
+            byte sectorsToProtect =
+                (byte)(requestedMask & ~currentMask);
+
+            byte sectorsToUnprotect =
+                (byte)(
+                    currentMask &
+                    ~requestedMask &
+                    WrpApplicationSectorMask
+                );
+
+            if (requestedMask == currentMask)
+            {
+                MessageBox.Show(
+                    $"The requested write-protection configuration " +
+                    $"is already active.\n\n" +
+                    $"Protected mask: 0x{currentMask:X2}\n" +
+                    $"Protected sectors: " +
+                    $"{FormatWriteProtectionSectors(currentMask)}",
+                    "Write Protection Unchanged",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+
+                return;
+            }
+
+            string protectText =
+                FormatWriteProtectionSectors(
+                    sectorsToProtect
+                );
+
+            string unprotectText =
+                FormatWriteProtectionSectors(
+                    sectorsToUnprotect
+                );
+
+            DialogResult confirmation =
+                MessageBox.Show(
+                    $"The write-protection configuration will be changed.\n\n" +
+                    $"Current mask: 0x{currentMask:X2}\n" +
+                    $"Target mask: 0x{requestedMask:X2}\n\n" +
+                    $"Sectors to protect:\n{protectText}\n\n" +
+                    $"Application sectors to unprotect:\n{unprotectText}\n\n" +
+                    $"Sector 0 and Sector 1 will remain protected. " +
+                    $"The custom bootloader protocol does not allow " +
+                    $"them to be unprotected.\n\n" +
+                    $"The microcontroller will reset after the option-byte " +
+                    $"operation. Continue?",
+                    "Confirm Write Protection",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2
+                );
+
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            bool commandsWereEnabled = grpBoxCommands.Enabled;
+
+            bool modeWasEnabled = grpBoxMode.Enabled;
+
+            grpBoxCommands.Enabled = false;
+            grpBoxMode.Enabled = false;
+            btnWriteProtect.Enabled = false;
+
+            lblConnectionStatus.Text = "Configuring Write Protection";
+
+            try
+            {
+                byte[] response =
+                    await SetWriteProtectionMaskAsync(
+                        requestedMask
+                    );
+
+                if ((response == null) ||
+                    (response.Length != WrpResponseLength))
+                {
+                    MessageBox.Show(
+                        "No complete response was received from the bootloader.",
+                        "Write Protection Timeout",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                byte responseStatus = response[0];
+
+                byte reportedMode = response[1];
+
+                byte reportedMask = response[2];
+
+                if (responseStatus != BootloaderAck)
+                {
+                    MessageBox.Show(
+                        $"The write-protection request was rejected.\n\n" +
+                        $"Status: 0x{responseStatus:X2}\n" +
+                        $"Protection mode: " +
+                        $"{GetFlashProtectionModeName(reportedMode)}\n" +
+                        $"Current mask: 0x{reportedMask:X2}\n" +
+                        $"Protected sectors: " +
+                        $"{FormatWriteProtectionSectors(reportedMask)}",
+                        "Write Protection Rejected",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    if (reportedMode ==
+                        FlashProtectionModeWriteProtection)
+                    {
+                        ApplyWriteProtectionMaskToUi(reportedMask);
+                    }
+
+                    return;
+                }
+
+                if (reportedMode !=
+                    FlashProtectionModeWriteProtection)
+                {
+                    MessageBox.Show(
+                        $"The bootloader acknowledged the request but " +
+                        $"reported an unexpected protection mode.\n\n" +
+                        $"Mode: " +
+                        $"{GetFlashProtectionModeName(reportedMode)}\n" +
+                        $"Reported mask: 0x{reportedMask:X2}",
+                        "Write Protection Protocol Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                lblConnectionStatus.Text = "Resetting";
+
+                bool synchronized = await WaitForBootloaderAfterResetAsync();
+
+                if (!synchronized)
+                {
+                    MessageBox.Show(
+                        $"The option-byte operation was accepted and the " +
+                        $"reported mask is 0x{reportedMask:X2}, but the GUI " +
+                        $"could not synchronize with the bootloader after reset.\n\n" +
+                        $"Perform a manual reset or power cycle, then reconnect.",
+                        "Reset Synchronization Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+
+                    return;
+                }
+
+                FlashProtectionStatus verifiedStatus =
+                    await GetWriteProtectionStatusAsync();
+
+                if (verifiedStatus == null)
+                {
+                    MessageBox.Show(
+                        "The device restarted, but the write-protection " +
+                        "status could not be verified.",
+                        "Verification Timeout",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+
+                    return;
+                }
+
+                if (verifiedStatus.ProtectionMode !=
+                    FlashProtectionModeWriteProtection)
+                {
+                    MessageBox.Show(
+                        $"The device restarted in an unexpected Flash " +
+                        $"protection mode.\n\n" +
+                        $"Mode: " +
+                        $"{GetFlashProtectionModeName(verifiedStatus.ProtectionMode)}\n" +
+                        $"Active mask: 0x{verifiedStatus.ActiveMask:X2}",
+                        "Write Protection Verification Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                ApplyWriteProtectionMaskToUi(
+                    verifiedStatus.ActiveMask
+                );
+
+                if (verifiedStatus.ActiveMask != requestedMask)
+                {
+                    MessageBox.Show(
+                        $"The device restarted, but the active mask does not " +
+                        $"match the requested mask.\n\n" +
+                        $"Requested: 0x{requestedMask:X2}\n" +
+                        $"Active: 0x{verifiedStatus.ActiveMask:X2}",
+                        "Write Protection Verification Failed",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+
+                    return;
+                }
+
+                lblConnectionStatus.Text = "Successful";
+
+                MessageBox.Show(
+                    $"Write protection was configured and verified successfully.\n\n" +
+                    $"Active mask: 0x{verifiedStatus.ActiveMask:X2}\n" +
+                    $"Protected sectors: " +
+                    $"{FormatWriteProtectionSectors(verifiedStatus.ActiveMask)}",
+                    "Write Protection Complete",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "Write Protection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
+            finally
+            {
+                grpBoxCommands.Enabled = commandsWereEnabled;
+
+                grpBoxMode.Enabled = modeWasEnabled;
+
+                btnWriteProtect.Enabled = true;
+
+                if (lblConnectionStatus.Text ==
+                    "Configuring Write Protection")
+                {
+                    lblConnectionStatus.Text =
+                        "Successful";
+                }
             }
         }
 
-        private void btnWriteProtect_Click(object sender, EventArgs e)
+        private async void btnWriteProtect_Click(object sender, EventArgs e)
         {
-            sendWriteProtectUnprotect();
+            try
+            {
+                await ApplyWriteProtectionAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "Write Protection Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+            }
         }
 
         private async Task SendReadoutProtectionDataAsync()
@@ -1508,7 +2247,7 @@ namespace STM32Flasher
                 }
             }
 
-            byte[] payload = {requestedLevel};
+            byte[] payload = { requestedLevel };
 
             byte command = (byte)BootloaderCommand.ReadoutProtect;
 

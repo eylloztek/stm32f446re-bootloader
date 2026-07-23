@@ -8,6 +8,31 @@
 #include "bootloader.h"
 #include "stdio.h"
 
+/*
+ * Response format:
+ * Byte 0: ACK or NACK
+ * Byte 1: protection mode
+ * Byte 2: active protection mask
+ */
+#define WRP_OPERATION_GET_STATUS             0x00U
+#define WRP_OPERATION_SET_MASK               0x01U
+#define FLASH_PROTECTION_MODE_WRP             0x00U
+#define FLASH_PROTECTION_MODE_PCROP           0x01U
+#define WRP_RESPONSE_SIZE                     3U
+#define WRP_VALID_SECTOR_MASK                 0xFFU
+#define WRP_BOOTLOADER_SECTOR_MASK            0x03U
+#define WRP_APPLICATION_SECTOR_MASK           0xFCU
+
+#define BOOTLOADER_BUILD_TAG                   "WRP_RESET_FIX_01"
+
+/*
+ * SPRMOD is bit 31 of OPTCR on STM32F446. Keep a target-specific fallback
+ * for older CMSIS device headers that do not expose the named bit mask.
+ */
+#ifndef FLASH_OPTCR_SPRMOD
+#define FLASH_OPTCR_SPRMOD                     (1UL << 31U)
+#endif
+
 extern uint8_t messageBuffer[BOOTLOADER_RX_BUFFER_SIZE];
 extern uint8_t counterTest;
 
@@ -19,6 +44,16 @@ static void writeUint32BigEndian(uint8_t *destination, uint32_t value);
 static uint32_t crc32Update(uint32_t crc, const uint8_t *data, uint32_t length);
 static uint32_t calculateBlockCrc32(uint8_t n, const uint8_t *data,
 		uint16_t dataLength);
+static uint8_t getFlashProtectionMode(void);
+static uint8_t getRawProtectionSectorBits(void);
+static uint8_t getActiveProtectionMask(uint8_t protectionMode);
+static HAL_StatusTypeDef stageWriteProtectionChange(uint8_t sectorMask,
+		uint32_t wrpState);
+static HAL_StatusTypeDef sendWriteProtectionResponse(uint8_t status,
+		uint8_t protectionMode, uint8_t activeProtectionMask);
+static void waitForUartTransmissionComplete(void);
+static void sendWriteProtectionResponseAndReset(uint8_t status,
+		uint8_t protectionMode, uint8_t activeProtectionMask);
 
 static uint32_t readUint32BigEndian(const uint8_t *data) {
 	if (data == NULL) {
@@ -91,7 +126,7 @@ static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength) {
 	case GET_HELP:
 	case GET_VERSION:
 	case GET_ID:
-	case RESET: {
+	case RESET_COMMAND: {
 		return commandLength == 1U;
 	}
 
@@ -125,15 +160,11 @@ static uint8_t validateCommandLength(uint8_t command, uint8_t commandLength) {
 
 	case WRITE_PROTECT_UNPROTECT: {
 		/*
-		 * Current protocol supports either:
-		 *
-		 * Command + unprotect marker
-		 *
-		 * or:
-		 *
-		 * Command + N + 1-6 sector identifiers
+		 * Command byte          : 1 byte
+		 * Operation             : 1 byte
+		 * Protected-sector mask : 1 byte
 		 */
-		return (commandLength >= 2U) && (commandLength <= 8U);
+		return commandLength == 3U;
 	}
 
 	case READOUT_PROTECT_UNPROTECT: {
@@ -216,6 +247,88 @@ static uint8_t validateBootloaderPacket(uint16_t packetLength) {
 	return 1U;
 }
 
+static uint8_t getFlashProtectionMode(void) {
+	if (READ_BIT(FLASH->OPTCR, FLASH_OPTCR_SPRMOD) != 0U) {
+		return FLASH_PROTECTION_MODE_PCROP;
+	}
+
+	return FLASH_PROTECTION_MODE_WRP;
+}
+
+static uint8_t getRawProtectionSectorBits(void) {
+	/*
+	 * On STM32F446, OPTCR bits 16-23 contain nWRP0-nWRP7.
+	 */
+	return (uint8_t) ((FLASH->OPTCR >> 16U) & WRP_VALID_SECTOR_MASK);
+}
+
+static uint8_t getActiveProtectionMask(uint8_t protectionMode) {
+	uint8_t rawSectorBits = getRawProtectionSectorBits();
+
+	if (protectionMode == FLASH_PROTECTION_MODE_PCROP) {
+		/*
+		 * PCROP mode:
+		 * nWRPi = 1 means that PCROP protection is active.
+		 */
+		return (uint8_t) (rawSectorBits & WRP_VALID_SECTOR_MASK);
+	}
+
+	/*
+	 * Normal write-protection mode:
+	 * nWRPi = 0 means that write protection is active.
+	 */
+	return (uint8_t) ((~rawSectorBits) & WRP_VALID_SECTOR_MASK);
+}
+
+static HAL_StatusTypeDef stageWriteProtectionChange(uint8_t sectorMask,
+		uint32_t wrpState) {
+	if (sectorMask == 0U) {
+		return HAL_OK;
+	}
+
+	FLASH_OBProgramInitTypeDef optionBytes = { 0 };
+
+	optionBytes.OptionType = OPTIONBYTE_WRP;
+	optionBytes.WRPState = wrpState;
+	optionBytes.WRPSector = (uint32_t) sectorMask;
+	optionBytes.Banks = FLASH_BANK_1;
+
+	return HAL_FLASHEx_OBProgram(&optionBytes);
+}
+
+static HAL_StatusTypeDef sendWriteProtectionResponse(uint8_t status,
+		uint8_t protectionMode, uint8_t activeProtectionMask) {
+	uint8_t response[WRP_RESPONSE_SIZE] = { status, protectionMode,
+			activeProtectionMask };
+
+	return HAL_UART_Transmit(UART_PORT, response, sizeof(response), 1000U);
+}
+
+static void waitForUartTransmissionComplete(void) {
+	while (__HAL_UART_GET_FLAG(UART_PORT, UART_FLAG_TC) == 0U) {
+		/*
+		 * Wait until the final response byte leaves the shift register.
+		 */
+	}
+}
+
+static void sendWriteProtectionResponseAndReset(uint8_t status,
+		uint8_t protectionMode, uint8_t activeProtectionMask) {
+	if (sendWriteProtectionResponse(status, protectionMode,
+			activeProtectionMask) == HAL_OK) {
+		waitForUartTransmissionComplete();
+	}
+
+	HAL_Delay(20U);
+	HAL_NVIC_SystemReset();
+
+	while (1) {
+		/*
+		 * System reset must not return.
+		 */
+	}
+}
+
 void processBootloaderCommand(uint16_t packetLength) {
 
 	if (!validateBootloaderPacket(packetLength)) {
@@ -262,7 +375,7 @@ void processBootloaderCommand(uint16_t packetLength) {
 	case GET_CHECKSUM:
 		handleGetChecksum();
 		break;
-	case RESET:
+	case RESET_COMMAND:
 		handleResetOperation();
 		break;
 	default:
@@ -276,8 +389,10 @@ void handleGetVersion(void) {
 	uint8_t response[2] = { ACK, BOOTLOADER_VERSION };
 
 #ifdef DEBUG_PRINT
-	printf("Bootloader Version: 0x%02X\r\n",
-	BOOTLOADER_VERSION);
+	printf("Bootloader Version: 0x%02X\r\n"
+			"Bootloader Build  : %s\r\n",
+	BOOTLOADER_VERSION,
+	BOOTLOADER_BUILD_TAG);
 #endif
 
 	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
@@ -295,8 +410,7 @@ void handleGetHelp(void) {
 	ERASE,
 	WRITE_PROTECT_UNPROTECT,
 	READOUT_PROTECT_UNPROTECT,
-	GET_CHECKSUM,
-	RESET };
+	GET_CHECKSUM, RESET_COMMAND };
 
 	const uint8_t totalCommands = (uint8_t) (sizeof(commands)
 			/ sizeof(commands[0]));
@@ -512,7 +626,7 @@ void handleGoToAddress(void) {
 	 */
 	while (__HAL_UART_GET_FLAG(
 			UART_PORT,
-			UART_FLAG_TC) == RESET) {
+			UART_FLAG_TC) == 0U) {
 		/* Wait for transmission completion. */
 	}
 
@@ -652,7 +766,7 @@ void handleWriteMemory(void) {
 		uint16_t receivedBlockLength = blockLength + BOOTLOADER_CRC_SIZE;
 
 		if (HAL_UART_Receive(UART_PORT, blockBuffer, receivedBlockLength,
-				WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
+		WRITE_BLOCK_TIMEOUT_MS) != HAL_OK) {
 #ifdef DEBUG_PRINT
 			printf("Timeout or UART error while receiving "
 					"firmware block.\r\n");
@@ -727,7 +841,7 @@ void handleWriteMemory(void) {
 			response = ACK;
 
 			if (HAL_UART_Transmit(UART_PORT, &response, 1U,
-					WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
+			WRITE_COMMAND_TIMEOUT_MS) != HAL_OK) {
 				return;
 			}
 
@@ -928,46 +1042,244 @@ void handleErase(void) {
 }
 
 void handleWriteProtectUnprotect(void) {
-	uint8_t response[1] = { 0 };
-	uint8_t offset = 3;
-	uint8_t numSectors = messageBuffer[offset] + 1;
-	uint8_t *sectorCodes = (uint8_t*) &messageBuffer[offset + 1];
+	const uint8_t offset = 3U;
+	const uint8_t expectedCommandLength = 3U;
+	uint8_t protectionMode = getFlashProtectionMode();
+	uint8_t activeProtectionMask = getActiveProtectionMask(protectionMode);
+	uint8_t rawSectorBits = getRawProtectionSectorBits();
+	uint32_t optcrSnapshot = FLASH->OPTCR;
+	uint32_t sprmodMask = FLASH_OPTCR_SPRMOD;
+	uint8_t sprmodBit = ((optcrSnapshot & sprmodMask) != 0U) ? 1U : 0U;
 
-	HAL_FLASH_OB_Unlock();
+	if (messageBuffer[1] != expectedCommandLength) {
+#ifdef DEBUG_PRINT
+		printf("Invalid protection command length: %u\r\n", messageBuffer[1]);
+#endif
 
-	FLASH_OBProgramInitTypeDef obInit;
-	HAL_FLASHEx_OBGetConfig(&obInit);
-
-	obInit.OptionType = OPTIONBYTE_WRP;
-	obInit.WRPSector = 0xFF; //all sector unprotect
-	obInit.WRPState = OB_WRPSTATE_DISABLE;
-	HAL_FLASHEx_OBProgram(&obInit);
-
-	uint8_t wrpMask = 0;
-
-	for (uint8_t i = 0; i < numSectors; i++) {
-		uint8_t sector = sectorCodes[i];
-		if (sector < 8) {
-			wrpMask |= (1 << sector);
-		}
+		(void) sendWriteProtectionResponse(NACK, protectionMode,
+				activeProtectionMask);
+		return;
 	}
 
-	if (wrpMask > 0) {
-		obInit.OptionType = OPTIONBYTE_WRP;
-		obInit.WRPSector = wrpMask;
-		obInit.WRPState = OB_WRPSTATE_ENABLE;
+	uint8_t operation = messageBuffer[offset];
+	uint8_t requestedProtectedMask = messageBuffer[offset + 1U];
 
-		if (HAL_FLASHEx_OBProgram(&obInit) != HAL_OK) {
-			response[0] = NACK;
-			HAL_UART_Transmit(UART_PORT, response, sizeof(response),
-			HAL_MAX_DELAY);
-			HAL_FLASH_OB_Lock();
+#ifdef DEBUG_PRINT
+	printf("Flash protection request.\r\n"
+			"Operation        : 0x%02X\r\n"
+			"Protection mode  : 0x%02X\r\n"
+			"SPRMOD           : %u\r\n"
+			"SPRMOD mask      : 0x%08lX\r\n"
+			"Raw nWRP bits    : 0x%02X\r\n"
+			"Active mask      : 0x%02X\r\n"
+			"Requested mask   : 0x%02X\r\n"
+			"OPTCR            : 0x%08lX\r\n", operation, protectionMode,
+			sprmodBit, sprmodMask, rawSectorBits, activeProtectionMask,
+			requestedProtectedMask, optcrSnapshot);
+#endif
+
+	/*
+	 * Status is always readable. In PCROP mode, the returned mask denotes
+	 * PCROP-protected sectors instead of write-protected sectors.
+	 */
+	if (operation == WRP_OPERATION_GET_STATUS) {
+		if (requestedProtectedMask != 0U) {
+#ifdef DEBUG_PRINT
+			printf("Protection status request rejected: "
+					"mask field must be zero.\r\n");
+#endif
+
+			(void) sendWriteProtectionResponse(NACK, protectionMode,
+					activeProtectionMask);
+			return;
 		}
+
+#ifdef DEBUG_PRINT
+		printf("Protection status returned. "
+				"Mode: 0x%02X, Mask: 0x%02X\r\n", protectionMode,
+				activeProtectionMask);
+#endif
+
+		(void) sendWriteProtectionResponse(ACK, protectionMode,
+				activeProtectionMask);
+		return;
 	}
 
-	response[0] = ACK;
-	HAL_UART_Transmit(UART_PORT, response, sizeof(response), HAL_MAX_DELAY);
-	HAL_FLASH_OB_Launch();
+	if (operation != WRP_OPERATION_SET_MASK) {
+#ifdef DEBUG_PRINT
+		printf("Unsupported protection operation: 0x%02X\r\n", operation);
+#endif
+
+		(void) sendWriteProtectionResponse(NACK, protectionMode,
+				activeProtectionMask);
+		return;
+	}
+
+	/*
+	 * HAL's WRP enable/disable interpretation is not valid in PCROP mode.
+	 * Do not modify the option bytes while SPRMOD selects PCROP.
+	 */
+	if (protectionMode != FLASH_PROTECTION_MODE_WRP) {
+#ifdef DEBUG_PRINT
+		printf("Write-protection update rejected because "
+				"the device is in PCROP mode.\r\n");
+#endif
+
+		(void) sendWriteProtectionResponse(NACK, protectionMode,
+				activeProtectionMask);
+		return;
+	}
+
+	uint8_t currentProtectedMask = activeProtectionMask;
+
+	/*
+	 * Sector 0 and Sector 1 contain the bootloader and must remain
+	 * write-protected in every accepted target mask.
+	 */
+	if ((requestedProtectedMask & WRP_BOOTLOADER_SECTOR_MASK)
+			!= WRP_BOOTLOADER_SECTOR_MASK) {
+#ifdef DEBUG_PRINT
+		printf("Write-protection request rejected because "
+				"the bootloader sectors must remain protected.\r\n");
+#endif
+
+		(void) sendWriteProtectionResponse(NACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+		return;
+	}
+
+	if (requestedProtectedMask == currentProtectedMask) {
+#ifdef DEBUG_PRINT
+		printf("Requested write-protection mask is already active.\r\n");
+#endif
+
+		(void) sendWriteProtectionResponse(ACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+		return;
+	}
+
+	uint8_t sectorsToProtect = (uint8_t) (requestedProtectedMask
+			& (uint8_t) (~currentProtectedMask));
+
+	uint8_t sectorsToUnprotect = (uint8_t) (currentProtectedMask
+			& (uint8_t) (~requestedProtectedMask));
+
+	sectorsToProtect &= WRP_VALID_SECTOR_MASK;
+	sectorsToUnprotect &= WRP_APPLICATION_SECTOR_MASK;
+
+#ifdef DEBUG_PRINT
+	printf("Sectors to protect   : 0x%02X\r\n"
+			"Sectors to unprotect : 0x%02X\r\n", sectorsToProtect,
+			sectorsToUnprotect);
+#endif
+
+	if (HAL_FLASH_Unlock() != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Flash unlock failed during write-protection update.\r\n");
+#endif
+
+		(void) sendWriteProtectionResponse(NACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+		return;
+	}
+
+	if ((READ_BIT(FLASH->OPTCR, FLASH_OPTCR_OPTLOCK) != 0U)
+			&& (HAL_FLASH_OB_Unlock() != HAL_OK)) {
+#ifdef DEBUG_PRINT
+		printf("Option-byte unlock failed during "
+				"write-protection update.\r\n");
+#endif
+
+		HAL_FLASH_Lock();
+		(void) sendWriteProtectionResponse(NACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+		return;
+	}
+
+	__HAL_FLASH_CLEAR_FLAG(
+			FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
+
+	if (stageWriteProtectionChange(sectorsToProtect,
+	OB_WRPSTATE_ENABLE) != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Could not stage write protection. "
+				"Flash error: 0x%08lX\r\n", HAL_FLASH_GetError());
+#endif
+
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+		sendWriteProtectionResponseAndReset(NACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+	}
+
+	if (stageWriteProtectionChange(sectorsToUnprotect,
+	OB_WRPSTATE_DISABLE) != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Could not stage write unprotection. "
+				"Flash error: 0x%08lX\r\n", HAL_FLASH_GetError());
+#endif
+
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+		sendWriteProtectionResponseAndReset(NACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+	}
+
+	uint8_t stagedProtectedMask = getActiveProtectionMask(
+	FLASH_PROTECTION_MODE_WRP);
+
+	if (stagedProtectedMask != requestedProtectedMask) {
+#ifdef DEBUG_PRINT
+		printf("Staged write-protection mask mismatch. "
+				"Expected: 0x%02X, Staged: 0x%02X\r\n", requestedProtectedMask,
+				stagedProtectedMask);
+#endif
+
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+		sendWriteProtectionResponseAndReset(NACK,
+		FLASH_PROTECTION_MODE_WRP, currentProtectedMask);
+	}
+
+	if (HAL_FLASH_OB_Launch() != HAL_OK) {
+#ifdef DEBUG_PRINT
+		printf("Write-protection option-byte launch failed. "
+				"Flash error: 0x%08lX\r\n", HAL_FLASH_GetError());
+#endif
+
+		uint8_t reportedMask = getActiveProtectionMask(
+		FLASH_PROTECTION_MODE_WRP);
+
+		HAL_FLASH_OB_Lock();
+		HAL_FLASH_Lock();
+		sendWriteProtectionResponseAndReset(NACK,
+		FLASH_PROTECTION_MODE_WRP, reportedMask);
+	}
+
+	uint8_t programmedProtectedMask = getActiveProtectionMask(
+	FLASH_PROTECTION_MODE_WRP);
+
+	HAL_FLASH_OB_Lock();
+	HAL_FLASH_Lock();
+
+	if (programmedProtectedMask != requestedProtectedMask) {
+#ifdef DEBUG_PRINT
+		printf("Programmed write-protection mask mismatch. "
+				"Expected: 0x%02X, Programmed: 0x%02X\r\n",
+				requestedProtectedMask, programmedProtectedMask);
+#endif
+
+		sendWriteProtectionResponseAndReset(NACK,
+		FLASH_PROTECTION_MODE_WRP, programmedProtectedMask);
+	}
+
+#ifdef DEBUG_PRINT
+	printf("Write-protection mask programmed successfully: "
+			"0x%02X\r\n", programmedProtectedMask);
+#endif
+
+	sendWriteProtectionResponseAndReset(ACK,
+	FLASH_PROTECTION_MODE_WRP, programmedProtectedMask);
 }
 
 void handleReadoutProtectUnprotect(void) {
@@ -1137,7 +1449,7 @@ void handleReadoutProtectUnprotect(void) {
 	 * Wait until the UART shift register has completely transmitted
 	 * the ACK byte before starting the option-byte operation.
 	 */
-	while (__HAL_UART_GET_FLAG(UART_PORT, UART_FLAG_TC) == RESET) {
+	while (__HAL_UART_GET_FLAG(UART_PORT, UART_FLAG_TC) == 0U) {
 		/* Wait for transmission completion. */
 	}
 
@@ -1550,7 +1862,7 @@ HAL_StatusTypeDef JumpToApplication(uint32_t applicationAddress) {
 	 */
 	while (__HAL_UART_GET_FLAG(
 			UART_PORT,
-			UART_FLAG_TC) == RESET) {
+			UART_FLAG_TC) == 0U) {
 		/* Wait for UART transmission completion. */
 	}
 

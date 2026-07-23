@@ -9,28 +9,37 @@
 #define INC_BOOTLOADER_H_
 
 #include "main.h"
-#include "string.h"
+#include <string.h>
 
-#define BOOTLOADER_HEADER 				0x7F
-#define APPLICATION_HEADER				0x7E
-#define BOOTLOADER_VERSION				0x10
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define GET_HELP							0x00
-#define GET_VERSION						0x01
-#define GET_ID							0x02
-#define READ_MEMORY						0x11
-#define GO_TO_ADDRESS					0x21
-#define WRITE_MEMORY						0x31
-#define ERASE							0x43
-#define WRITE_PROTECT_UNPROTECT			0x63
-#define READOUT_PROTECT_UNPROTECT		0x82
-#define GET_CHECKSUM						0xA1
-#define RESET							0x89
+#define BOOTLOADER_HEADER                   0x7FU
+#define BOOTLOADER_VERSION                  0x10U
 
-#define ACK								0x79
-#define WRITE_COMPLETE                  	0x7AU
-#define NACK								0x1F
-#define UNKNOWN							0x99
+/*
+ * Custom bootloader command codes.
+ */
+#define GET_HELP                            0x00U
+#define GET_VERSION                         0x01U
+#define GET_ID                              0x02U
+#define READ_MEMORY                         0x11U
+#define GO_TO_ADDRESS                       0x21U
+#define WRITE_MEMORY                        0x31U
+#define ERASE                               0x43U
+#define WRITE_PROTECT_UNPROTECT             0x63U
+#define READOUT_PROTECT_UNPROTECT           0x82U
+#define GET_CHECKSUM                        0xA1U
+#define RESET_COMMAND                       0x89U
+
+/*
+ * Custom bootloader response codes.
+ */
+#define ACK                                 0x79U
+#define WRITE_COMPLETE                      0x7AU
+#define NACK                                0x1FU
+#define UNKNOWN                             0x99U
 
 /*
  * CRC-32/ISO-HDLC parameters.
@@ -57,7 +66,7 @@
  * Firmware data blocks are transferred separately and are not
  * stored inside this command buffer.
  */
-#define BOOTLOADER_MAX_COMMAND_LENGTH       32U
+#define BOOTLOADER_MAX_COMMAND_LENGTH        32U
 
 /*
  * Complete command frame:
@@ -70,11 +79,11 @@
 #define BOOTLOADER_RX_BUFFER_SIZE            \
     (BOOTLOADER_MAX_COMMAND_LENGTH + BOOTLOADER_FRAME_OVERHEAD)
 
-#define BOOTLOADER_MIN_COMMAND_LENGTH       1U
-#define BOOTLOADER_FRAME_TIMEOUT_MS         250U
+#define BOOTLOADER_MIN_COMMAND_LENGTH        1U
+#define BOOTLOADER_FRAME_TIMEOUT_MS          250U
 
-#define WRITE_COMMAND_TIMEOUT_MS        	3000U
-#define WRITE_BLOCK_TIMEOUT_MS          	5000U
+#define WRITE_COMMAND_TIMEOUT_MS             3000U
+#define WRITE_BLOCK_TIMEOUT_MS               5000U
 
 /*
  * Readout protection request codes used by the custom protocol.
@@ -82,8 +91,8 @@
  * These values are protocol-level identifiers and are intentionally
  * different from the hardware option-byte values.
  */
-#define RDP_REQUEST_LEVEL_0             	0x00U
-#define RDP_REQUEST_LEVEL_1             	0x01U
+#define RDP_REQUEST_LEVEL_0                  0x00U
+#define RDP_REQUEST_LEVEL_1                  0x01U
 
 /*
  * Bootloader:
@@ -125,6 +134,56 @@
 #define APPLICATION_VECTOR_ALIGNMENT    0x80UL
 #define APPLICATION_VECTOR_ENTRY_SIZE   8UL
 
+/*
+ * Write-protection protocol operations.
+ */
+#define WRP_OPERATION_GET_STATUS            0x00U
+#define WRP_OPERATION_SET_MASK              0x01U
+
+/*
+ * STM32F446RE contains Flash sectors 0 through 7.
+ *
+ * Protocol mask:
+ * Bit 0 -> Sector 0
+ * Bit 1 -> Sector 1
+ * ...
+ * Bit 7 -> Sector 7
+ *
+ * The meaning of a set bit depends on the reported protection mode:
+ *
+ * FLASH_PROTECTION_MODE_WRP:
+ *   A set bit means that write protection is active.
+ *
+ * FLASH_PROTECTION_MODE_PCROP:
+ *   A set bit means that PCROP protection is active.
+ */
+#define WRP_VALID_SECTOR_MASK               0xFFU
+
+/*
+ * Sector 0 and Sector 1 contain the bootloader.
+ *
+ * The custom bootloader protocol never permits these sectors
+ * to become unprotected.
+ */
+#define WRP_BOOTLOADER_SECTOR_MASK          0x03U
+#define WRP_APPLICATION_SECTOR_MASK         0xFCU
+
+/*
+ * Flash protection modes reported by the custom protocol.
+ */
+#define FLASH_PROTECTION_MODE_WRP           0x00U
+#define FLASH_PROTECTION_MODE_PCROP         0x01U
+#define FLASH_PROTECTION_MODE_UNKNOWN       0xFFU
+
+/*
+ * Write-protection command response:
+ *
+ * Byte 0: ACK or NACK
+ * Byte 1: Protection mode
+ * Byte 2: Active protection mask
+ */
+#define WRP_RESPONSE_SIZE                    3U
+
 void processBootloaderCommand(uint16_t packetLength);
 void handleGetVersion(void);
 void handleGetHelp(void);
@@ -149,5 +208,9 @@ uint8_t verifyGoAddress(uint32_t address);
 uint8_t validateApplicationVectorTable(uint32_t applicationAddress,
 		uint32_t *initialStackPointer, uint32_t *resetHandlerAddress);
 HAL_StatusTypeDef JumpToApplication(uint32_t applicationAddress);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INC_BOOTLOADER_H_ */
